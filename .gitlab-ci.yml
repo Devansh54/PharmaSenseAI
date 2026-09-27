@@ -1,0 +1,30 @@
+stages:
+  - test
+
+variables:
+  POSTGRES_DB: pharmasense
+  POSTGRES_USER: pharmasense
+  POSTGRES_PASSWORD: pharmasense
+  PHARMASENSE_DATABASE_URL: "postgresql+psycopg2://pharmasense:pharmasense@postgres:5432/pharmasense"
+  PHARMASENSE_TEST_DATABASE_URL: "postgresql+psycopg2://pharmasense:pharmasense@postgres:5432/pharmasense"
+
+phase1_audit_and_tests:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - name: postgres:16
+      alias: postgres
+  before_script:
+    - pip install --no-cache-dir -r requirements.txt
+  script:
+    - python -m alembic -c alembic.ini upgrade head
+    - python -m phase1.ingestion.import_csvs
+    - python -m phase1.audit.run_audit
+    - python -m phase1.ingestion.drift
+    - pytest -v tests/
+  artifacts:
+    when: always
+    paths:
+      - phase1/reports/
+      - phase1/provenance/
+    expire_in: 30 days
