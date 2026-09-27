@@ -11,6 +11,12 @@ from phase1.config import CSV_FILES
 from phase1.schemas import LOAD_ORDER
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "smoke: live tests that call a real external provider (skipped without credentials)"
+    )
+
+
 @pytest.fixture(scope="session")
 def csv_frames():
     return {

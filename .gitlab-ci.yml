@@ -28,3 +28,11 @@ phase1_audit_and_tests:
       - phase1/reports/
       - phase1/provenance/
     expire_in: 30 days
+
+phase2_llm_gateway_tests:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - pip install --no-cache-dir -r requirements.txt
+  script:
+    - pytest -v tests/test_llm_gateway.py tests/test_usage.py tests/test_openai_adapter.py tests/test_llm_gateway_smoke.py
