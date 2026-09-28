@@ -12,7 +12,11 @@ phase1_audit_and_tests:
   stage: test
   image: python:3.11-slim
   services:
-    - name: postgres:16
+    # pgvector/pgvector:pg16 is postgres:16 plus the pgvector extension.
+    # Needed because this job runs the full shared Alembic history
+    # (including 0002_phase3_rag_foundation's CREATE EXTENSION vector),
+    # even though Phase 1 itself has no vector columns.
+    - name: pgvector/pgvector:pg16
       alias: postgres
   before_script:
     - pip install --no-cache-dir -r requirements.txt
