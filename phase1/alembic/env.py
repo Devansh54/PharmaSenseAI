@@ -10,6 +10,7 @@ from sqlalchemy import engine_from_config, pool
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from phase1.db.models import Base  # noqa: E402
+import phase3.db.models  # noqa: E402,F401 - registers document_chunks on Base.metadata
 from phase1.config import DATABASE_URL  # noqa: E402
 
 config = context.config
