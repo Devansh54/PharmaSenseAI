@@ -59,8 +59,17 @@ def test_search_returns_exact_text_match_as_top_result(pgvector_engine):
         assert results[0].score > 0.99
 
 
-def test_search_respects_top_k():
-    pass
+def test_search_respects_top_k(pgvector_engine):
+    with Session(pgvector_engine) as session:
+        for i in range(5):
+            doc_id = f"DOC-000{i}"
+            make_research_document(session, doc_id, f"passage number {i}")
+            _add_chunk(session, f"{doc_id}::chunk::0", doc_id, f"passage number {i}")
+        session.commit()
+
+        results = search(session, "passage number 0", EMBEDDER, top_k=2)
+
+        assert len(results) == 2
 
 
 def test_metadata_filters_restrict_results(pgvector_engine):
