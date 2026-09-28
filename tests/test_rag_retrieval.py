@@ -6,13 +6,14 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from phase3.config import EMBEDDING_DIM
 from phase3.db.models import DocumentChunk
 from phase3.embeddings import DeterministicFakeEmbedder
 from phase3.retrieval import RetrievalFilters, search
 
 from tests.rag_helpers import make_compound, make_research_document
 
-EMBEDDER = DeterministicFakeEmbedder(dimension=16)
+EMBEDDER = DeterministicFakeEmbedder(dimension=EMBEDDING_DIM)
 
 
 def _add_chunk(session, chunk_id, doc_id, text, **overrides):
