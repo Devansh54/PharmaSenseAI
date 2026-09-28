@@ -1,0 +1,39 @@
+[
+  {
+    "query": "Regulatory briefing document for DKU-1023 summary of nonclinical and clinical safety data supporting the Phase III submission",
+    "expected_doc_ids": ["DOC-00002"],
+    "top_k": 5
+  },
+  {
+    "query": "Regulatory briefing document for AGN-1006 summary of nonclinical and clinical safety data supporting the Phase I submission",
+    "expected_doc_ids": ["DOC-00004"],
+    "top_k": 5
+  },
+  {
+    "query": "Ran Enzymatic Inhibition Assay on DKU-1144 SGLT2 program at 10.1 uM concentration, strong target engagement",
+    "expected_doc_ids": ["DOC-00003"],
+    "top_k": 5
+  },
+  {
+    "query": "Follow-up Pharmacokinetic PK Study in triplicate for SNF-1107, Metabolic Disease watchlist candidate",
+    "expected_doc_ids": ["DOC-00001"],
+    "top_k": 5
+  },
+  {
+    "query": "SOP deviation report temperature excursion during Cell Viability Assay for PSA-1010, equipment calibration overdue",
+    "expected_doc_ids": ["DOC-00120"],
+    "top_k": 5
+  },
+  {
+    "query": "Literature review on PCSK9 inhibitors and SNF-1118, Infectious Disease indications, Diarrhea-related toxicity",
+    "expected_doc_ids": ["DOC-00040"],
+    "top_k": 5
+  },
+  {
+    "query": "nonclinical and clinical safety data for a compound that does not exist in this corpus",
+    "expected_doc_ids": [],
+    "expect_empty": true,
+    "filters": {"compound_id": "CMP-9999"},
+    "top_k": 5
+  }
+]
