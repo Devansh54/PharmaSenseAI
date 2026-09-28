@@ -60,3 +60,22 @@ database.
 audit -> drift -> test) against a `postgres:16` service container on
 every push, so ingestion and DB-backed tests are exercised in an
 environment with a real, reachable database.
+
+## Phase 3: RAG foundation
+The same Alembic history (`phase1/alembic/versions/`) also creates the
+pgvector extension and the `document_chunks` table used by Phase 3.
+After step 4 above (`alembic upgrade head`) and step 4's CSV import:
+
+```
+python -m phase3.ingestion   # chunk + embed research_documents into document_chunks
+python -m phase3.baseline    # run the labeled retrieval baseline (phase3/golden_set.json)
+pytest tests/test_rag_*.py
+```
+
+`phase3.ingestion`/`phase3.baseline` use the real `BAAI/bge-small-en-
+v1.5` embedder (via `sentence-transformers`) and require a Postgres
+instance with the `vector` extension available - CI uses the
+`pgvector/pgvector:pg16` image for this job. The RAG unit/integration
+tests use a deterministic, dependency-free fake embedder instead, so
+they never need to download model weights; only `phase3.ingestion`/
+`phase3.baseline` exercise the real model.

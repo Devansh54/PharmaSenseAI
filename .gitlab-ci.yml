@@ -36,3 +36,23 @@ phase2_llm_gateway_tests:
     - pip install --no-cache-dir -r requirements.txt
   script:
     - pytest -v tests/test_llm_gateway.py tests/test_usage.py tests/test_openai_adapter.py tests/test_llm_gateway_smoke.py
+
+phase3_rag_foundation_tests:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - name: pgvector/pgvector:pg16
+      alias: postgres
+  before_script:
+    - pip install --no-cache-dir -r requirements.txt
+  script:
+    - python -m alembic -c alembic.ini upgrade head
+    - python -m phase1.ingestion.import_csvs
+    - python -m phase3.ingestion
+    - python -m phase3.baseline
+    - pytest -v tests/test_rag_chunking.py tests/test_rag_embeddings.py tests/test_rag_ingestion.py tests/test_rag_retrieval.py tests/test_rag_references.py tests/test_rag_baseline.py
+  artifacts:
+    when: always
+    paths:
+      - phase3/reports/
+    expire_in: 30 days
