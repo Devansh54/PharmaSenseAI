@@ -1,4 +1,4 @@
-from phase1.audit.schema_checks import check_schema
+from pharmasense.data.audit.schema_checks import check_schema
 
 
 def test_all_tables_pass_schema_check(csv_frames):

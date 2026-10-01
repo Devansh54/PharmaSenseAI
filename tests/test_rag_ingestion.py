@@ -1,12 +1,12 @@
-"""Unit tests for phase3.ingestion.build_chunk_rows.
+"""Unit tests for pharmasense.retrieval.ingestion.build_chunk_rows.
 
 No database and no model download: exercises the chunk-building /
 repeated-body redundancy logic directly against DeterministicFakeEmbedder.
 """
 from datetime import date
 
-from phase3.embeddings import DeterministicFakeEmbedder
-from phase3.ingestion import SourceDocument, build_chunk_rows, content_hash
+from pharmasense.retrieval.embeddings import DeterministicFakeEmbedder
+from pharmasense.retrieval.ingestion import SourceDocument, build_chunk_rows, content_hash
 
 
 def _doc(doc_id, full_text, **overrides):

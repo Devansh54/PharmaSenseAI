@@ -1,4 +1,4 @@
-from phase1.audit.anomaly_checks import ANOMALY_CHECKS
+from pharmasense.data.audit.anomaly_checks import ANOMALY_CHECKS
 
 
 def test_anomaly_checks_execute_without_error(csv_frames):

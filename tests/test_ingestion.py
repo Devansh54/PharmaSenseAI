@@ -10,9 +10,9 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
-from phase1.db.models import Base
-from phase1.ingestion.import_csvs import import_all_csvs
-from phase1.ingestion.drift import detect_drift
+from pharmasense.db.source_schema import Base
+from pharmasense.data.ingest.import_csvs import import_all_csvs
+from pharmasense.data.ingest.drift import detect_drift
 
 DATABASE_URL = os.environ.get(
     "PHARMASENSE_TEST_DATABASE_URL",

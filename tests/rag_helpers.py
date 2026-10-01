@@ -10,7 +10,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from phase1.db.models import ClinicalTrial, Compound, ResearchDocument
+from pharmasense.db.source_schema import ClinicalTrial, Compound, ResearchDocument
 
 
 def make_compound(session: Session, compound_id: str = "CMP-0001") -> Compound:

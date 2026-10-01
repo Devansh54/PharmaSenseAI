@@ -1,7 +1,7 @@
-"""Unit tests for phase3.chunking: document-preserving chunking."""
+"""Unit tests for pharmasense.retrieval.chunking: document-preserving chunking."""
 import pytest
 
-from phase3.chunking import chunk_document, count_tokens
+from pharmasense.retrieval.chunking import chunk_document, count_tokens
 
 
 def test_short_document_is_returned_as_a_single_unmodified_chunk():

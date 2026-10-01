@@ -11,10 +11,10 @@ import os
 
 import pytest
 
-from phase2.config import GatewayConfig, OpenAIAdapterConfig
-from phase2.llm.contracts import LLMRequest, Message
-from phase2.llm.gateway import LLMGateway
-from phase2.llm.openai_adapter import OpenAIAdapter
+from pharmasense.config import GatewayConfig, OpenAIAdapterConfig
+from pharmasense.llm.contracts import LLMRequest, Message
+from pharmasense.llm.gateway import LLMGateway
+from pharmasense.llm.openai_adapter import OpenAIAdapter
 
 pytestmark = pytest.mark.smoke
 

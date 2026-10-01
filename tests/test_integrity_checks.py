@@ -1,4 +1,4 @@
-from phase1.audit.integrity_checks import (
+from pharmasense.data.audit.integrity_checks import (
     check_primary_key,
     check_required_columns,
     check_full_row_duplicates,

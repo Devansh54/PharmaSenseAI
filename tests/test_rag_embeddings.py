@@ -1,5 +1,5 @@
-"""Unit tests for phase3.embeddings.DeterministicFakeEmbedder."""
-from phase3.embeddings import DeterministicFakeEmbedder
+"""Unit tests for pharmasense.retrieval.embeddings.DeterministicFakeEmbedder."""
+from pharmasense.retrieval.embeddings import DeterministicFakeEmbedder
 
 
 def test_same_text_yields_identical_vector():

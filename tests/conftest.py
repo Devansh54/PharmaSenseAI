@@ -10,8 +10,8 @@ from sqlalchemy.exc import OperationalError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from phase1.config import CSV_FILES
-from phase1.schemas import LOAD_ORDER
+from pharmasense.config import CSV_FILES
+from pharmasense.contracts import LOAD_ORDER
 
 _PHASE3_DATABASE_URL = os.environ.get(
     "PHARMASENSE_TEST_DATABASE_URL",
@@ -44,8 +44,8 @@ def pgvector_engine():
     skipped automatically when no PostgreSQL instance is reachable, so
     the rest of the suite still runs without a database.
     """
-    from phase1.db.models import Base
-    import phase3.db.models  # noqa: F401 - registers document_chunks on Base.metadata
+    from pharmasense.db.source_schema import Base
+    import pharmasense.db.models  # noqa: F401 - registers document_chunks on Base.metadata
 
     engine = create_engine(_PHASE3_DATABASE_URL)
     try:

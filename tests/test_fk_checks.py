@@ -1,8 +1,8 @@
-from phase1.audit.fk_checks import (
+from pharmasense.data.audit.fk_checks import (
     check_foreign_keys,
     check_adverse_event_site_trial_consistency,
 )
-from phase1.schemas import SCHEMAS
+from pharmasense.contracts import SCHEMAS
 
 
 def test_foreign_keys_have_no_orphans(csv_frames):

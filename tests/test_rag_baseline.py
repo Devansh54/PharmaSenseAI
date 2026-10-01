@@ -1,21 +1,21 @@
-"""Integration tests for phase3.baseline against real Postgres +
+"""Integration tests for pharmasense.retrieval.baseline against real Postgres +
 pgvector. Skipped automatically if no database is reachable (see
 tests/conftest.py::pgvector_engine).
 
 Uses synthetic fixtures and DeterministicFakeEmbedder to validate the
 scoring/report-writing logic itself - independent of golden_set.json
 and the real BGEEmbedder, which are only meant to be run together
-(python -m phase3.baseline) for a production-meaningful number.
+(python -m pharmasense.retrieval.baseline) for a production-meaningful number.
 """
 import json
 from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from phase3.baseline import GoldenQuery, run_baseline, write_report
-from phase3.config import EMBEDDING_DIM
-from phase3.db.models import DocumentChunk
-from phase3.embeddings import DeterministicFakeEmbedder
+from pharmasense.retrieval.baseline import GoldenQuery, run_baseline, write_report
+from pharmasense.config import EMBEDDING_DIM
+from pharmasense.db.models import DocumentChunk
+from pharmasense.retrieval.embeddings import DeterministicFakeEmbedder
 
 from tests.rag_helpers import make_research_document
 

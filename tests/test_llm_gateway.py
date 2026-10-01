@@ -8,8 +8,8 @@ from typing import List, Union
 
 import pytest
 
-from phase2.config import GatewayConfig
-from phase2.llm.contracts import (
+from pharmasense.config import GatewayConfig
+from pharmasense.llm.contracts import (
     LLMInvalidOutputError,
     LLMProvider,
     LLMProviderError,
@@ -21,9 +21,9 @@ from phase2.llm.contracts import (
     ToolSpec,
     Usage,
 )
-from phase2.llm.gateway import LLMGateway
-from phase2.llm.retry import RetryPolicy
-from phase2.llm.tracing import InMemoryTracer
+from pharmasense.llm.gateway import LLMGateway
+from pharmasense.llm.retry import RetryPolicy
+from pharmasense.llm.tracing import InMemoryTracer
 
 
 class FakeProvider(LLMProvider):

@@ -1,4 +1,4 @@
-"""Integration tests for phase3.references.resolve_reference against
+"""Integration tests for pharmasense.retrieval.references.resolve_reference against
 real Postgres + pgvector. Skipped automatically if no database is
 reachable (see tests/conftest.py::pgvector_engine).
 """
@@ -7,10 +7,10 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from phase3.config import EMBEDDING_DIM
-from phase3.db.models import DocumentChunk
-from phase3.embeddings import DeterministicFakeEmbedder
-from phase3.references import ReferenceNotFoundError, resolve_reference
+from pharmasense.config import EMBEDDING_DIM
+from pharmasense.db.models import DocumentChunk
+from pharmasense.retrieval.embeddings import DeterministicFakeEmbedder
+from pharmasense.retrieval.references import ReferenceNotFoundError, resolve_reference
 
 from tests.rag_helpers import make_research_document
 
@@ -71,7 +71,7 @@ def test_resolve_reference_flags_missing_source_document(pgvector_engine):
 
         # Simulate the parent document row being gone while the chunk
         # citation (deliberately) survives.
-        from phase1.db.models import ResearchDocument
+        from pharmasense.db.source_schema import ResearchDocument
 
         session.query(ResearchDocument).filter(ResearchDocument.doc_id == "DOC-0001").delete()
         session.commit()

@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from phase2.config import OpenAIAdapterConfig
-from phase2.llm.contracts import LLMProviderError, LLMRequest, LLMTimeoutError, Message, ToolSpec
-from phase2.llm.openai_adapter import OpenAIAdapter
+from pharmasense.config import OpenAIAdapterConfig
+from pharmasense.llm.contracts import LLMProviderError, LLMRequest, LLMTimeoutError, Message, ToolSpec
+from pharmasense.llm.openai_adapter import OpenAIAdapter
 
 
 class _FakeCompletions:

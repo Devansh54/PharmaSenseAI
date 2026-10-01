@@ -1,8 +1,8 @@
 """Unit tests for token usage normalization and cost accounting."""
 import pytest
 
-from phase2.llm.contracts import Usage
-from phase2.llm.usage import compute_cost, normalize_usage
+from pharmasense.llm.contracts import Usage
+from pharmasense.llm.usage import compute_cost, normalize_usage
 
 
 def test_normalize_usage_passes_through_real_usage():

@@ -1,5 +1,5 @@
-from phase1.provenance import build_manifest, sha256_of_file
-from phase1.config import CSV_FILES
+from pharmasense.data.provenance import build_manifest, sha256_of_file
+from pharmasense.config import CSV_FILES
 
 
 def test_manifest_has_entry_per_csv():
