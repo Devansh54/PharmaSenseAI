@@ -11,13 +11,13 @@
 - **Phase 2 (Shared LLM Gateway):** Mostly complete (in `phase2/`), but code is not in `src/`.
 
 ## 3. Current Active Phase
-- **Phase 0 (Refactoring & Modernization):** Unifying the fragmented phase directories into the standard `src/pharmasense/` structure per Astra's plan, transitioning to `uv` for dependencies, and ensuring tests pass.
-- **Phase 3 (RAG Foundation):** In-progress. The logic exists in `phase3/`, but requires integration into the consolidated architecture and validation against the DB.
+- **Phase 0 (Refactoring & Modernization):** ✅ Complete. Codebase unified into `src/pharmasense/`, `uv` dependency management active, tests pass.
+- **Phase 3 (RAG Foundation):** ✅ Complete. PostgreSQL + pgvector container active, schemas migrated, base data and RAG embeddings ingested, and all DB integration tests pass successfully.
 
 ## 4. Remaining Phases
-- Phase 4: Tested Tool Library
-- Phase 5: Specialist Agents
-- Phase 6: Router + Orchestration
+- **Phase 4 (Tested Tool Library):** ✅ Complete. Implemented 6 deterministic core tools, added Review tables, achieved >90% test coverage.
+- **Phase 5 (Specialist Agents):** ✅ Complete. Built 5 bounded agents on the Phase 2 LLM Gateway with strict per-agent tool registries.
+- **Phase 6 (Router + Orchestration):** ✅ Complete. Implemented stateful router, single/sequential/parallel LangGraph workflows, explicit fan-in boundaries, and strict validation.
 - Phase 7: Guardrails
 - Phase 8: Golden-Set Evaluation
 - Phase 9: Observability Completion
