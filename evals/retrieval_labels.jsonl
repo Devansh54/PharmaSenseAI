@@ -1,0 +1,7 @@
+{"case_id": "eval-rag-001", "expected_doc_ids": ["DOC-00002"]}
+{"case_id": "eval-rag-002", "expected_doc_ids": ["DOC-00004"]}
+{"case_id": "eval-rag-003", "expected_doc_ids": ["DOC-00003"]}
+{"case_id": "eval-rag-004", "expected_doc_ids": ["DOC-00001"]}
+{"case_id": "eval-rag-005", "expected_doc_ids": ["DOC-00120"]}
+{"case_id": "eval-rag-006", "expected_doc_ids": ["DOC-00040"]}
+{"case_id": "eval-rag-007", "expected_doc_ids": []}

@@ -1,0 +1,28 @@
+{
+  "faithfulness": {
+    "name": "Faithfulness",
+    "description": "Evaluate if the generated answer is strictly grounded in the provided context/evidence.",
+    "rubric": "Score 1 if the answer contains only facts explicitly stated in or directly derived from the context. Score 0 if the answer contains ANY fabricated information, hallucinations, or claims not supported by the context.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "reasoning": {"type": "string", "description": "Brief explanation of the score"},
+        "score": {"type": "integer", "enum": [0, 1]}
+      },
+      "required": ["reasoning", "score"]
+    }
+  },
+  "relevance": {
+    "name": "Relevance",
+    "description": "Evaluate if the generated answer directly addresses the user's query.",
+    "rubric": "Score 1 if the answer provides a direct, useful response to the query. Score 0 if the answer is completely unrelated, evasive, or fails to answer the main question.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "reasoning": {"type": "string", "description": "Brief explanation of the score"},
+        "score": {"type": "integer", "enum": [0, 1]}
+      },
+      "required": ["reasoning", "score"]
+    }
+  }
+}
