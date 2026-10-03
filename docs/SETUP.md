@@ -1,81 +1,56 @@
-# Phase 1 Setup Guide
+# Setup & Development Workflow
 
-## Prerequisites
-- Python 3.11+
-- PostgreSQL 14+ (a local instance, or the `postgres:16` service used in CI)
+This document outlines the standard developer workflow for running tests and bringing up the local database for PharmaSenseAI.
 
-## 1. Install dependencies
-```
-pip install -r requirements.txt
-```
+## 1. Environment Setup
 
-## 2. Configure the database connection
-```
-export PHARMASENSE_DATABASE_URL="postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense"
+Ensure you have [uv](https://docs.astral.sh/uv/) installed.
+
+Install the project dependencies and create the virtual environment:
+```bash
+uv sync --all-extras
 ```
 
-## 3. Apply migrations
-```
-python -m alembic -c alembic.ini upgrade head
-```
-This creates the 7 source tables plus `data_provenance` and
-`ingestion_runs` metadata tables, with foreign keys enforced at the
-database level.
+## 2. Database Infrastructure
 
-## 4. Run the transactional import
-```
-python -m phase1.ingestion.import_csvs
-```
-Truncates and reloads all 7 source tables inside a single transaction.
-If any table fails to load, the entire import rolls back and the
-database is left in its prior state. A provenance manifest is written
-to `phase1/provenance/` on success.
-
-## 5. Run the audit
-```
-python -m phase1.audit.run_audit
-```
-Writes `phase1/reports/audit_report_latest.json` and `.md`. This is
-read-only with respect to the source CSVs.
-
-## 6. Check for drift
-```
-python -m phase1.ingestion.drift
-```
-Compares the current CSVs against the last captured provenance
-manifest in `phase1/provenance/manifest_latest.json` and reports any
-added/removed/changed files.
-
-## 7. Run tests
-```
-pytest tests/
-```
-Ingestion/drift integration tests connect to PostgreSQL and are
-skipped automatically if no instance is reachable. Schema/PK/FK/
-anomaly/provenance tests run against the CSVs directly and require no
-database.
-
-## CI
-`.gitlab-ci.yml` runs the full sequence above (migrate -> import ->
-audit -> drift -> test) against a `postgres:16` service container on
-every push, so ingestion and DB-backed tests are exercised in an
-environment with a real, reachable database.
-
-## Phase 3: RAG foundation
-The same Alembic history (`phase1/alembic/versions/`) also creates the
-pgvector extension and the `document_chunks` table used by Phase 3.
-After step 4 above (`alembic upgrade head`) and step 4's CSV import:
-
-```
-python -m phase3.ingestion   # chunk + embed research_documents into document_chunks
-python -m phase3.baseline    # run the labeled retrieval baseline (phase3/golden_set.json)
-pytest tests/test_rag_*.py
+Start the local PostgreSQL + `pgvector` container:
+```bash
+docker compose -f deployment/compose.yaml up -d --wait
 ```
 
-`phase3.ingestion`/`phase3.baseline` use the real `BAAI/bge-small-en-
-v1.5` embedder (via `sentence-transformers`) and require a Postgres
-instance with the `vector` extension available - CI uses the
-`pgvector/pgvector:pg16` image for this job. The RAG unit/integration
-tests use a deterministic, dependency-free fake embedder instead, so
-they never need to download model weights; only `phase3.ingestion`/
-`phase3.baseline` exercise the real model.
+## 3. Database Initialization
+
+With the database running, apply the Alembic schema migrations:
+```bash
+uv run alembic upgrade head
+```
+
+## 4. Data & RAG Ingestion
+
+Load the base CSV data and populate the RAG vector store:
+```bash
+# 1. Ingest base tables
+uv run python -m pharmasense.data.ingest.import_csvs
+
+# 2. Ingest document chunks and embeddings
+uv run python -m pharmasense.retrieval.ingestion
+```
+
+## 5. Testing
+
+Run the full test suite to confirm everything is working, including the database integration tests:
+```bash
+uv run pytest
+```
+
+## Stopping the Database
+
+To stop the database and clean up the container:
+```bash
+docker compose -f deployment/compose.yaml down
+```
+
+To stop and permanently wipe the volume data (requires a fresh ingestion):
+```bash
+docker compose -f deployment/compose.yaml down -v
+```
