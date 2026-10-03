@@ -68,6 +68,15 @@ def _to_openai_messages(messages: List[Message]) -> List[Dict[str, Any]]:
             entry["tool_call_id"] = m.tool_call_id
         if m.name:
             entry["name"] = m.name
+        if m.tool_calls:
+            entry["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}
+                }
+                for tc in m.tool_calls
+            ]
         payload.append(entry)
     return payload
 

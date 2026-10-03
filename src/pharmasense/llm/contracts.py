@@ -22,6 +22,7 @@ class Message:
     content: Optional[str] = None
     tool_call_id: Optional[str] = None
     name: Optional[str] = None
+    tool_calls: Optional[List[ToolCall]] = None
 
 
 @dataclass(frozen=True)
