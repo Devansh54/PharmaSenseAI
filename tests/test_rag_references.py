@@ -21,7 +21,7 @@ def _add_chunk(session, chunk_id, doc_id, text, **overrides):
     defaults = dict(
         chunk_id=chunk_id,
         doc_id=doc_id,
-        compound_id="CMP-0001",
+        compound_id=None,
         trial_id=None,
         doc_type="Regulatory Briefing",
         title="A resolvable title",
@@ -71,8 +71,10 @@ def test_resolve_reference_flags_missing_source_document(pgvector_engine):
 
         # Simulate the parent document row being gone while the chunk
         # citation (deliberately) survives.
+        from sqlalchemy import text
         from pharmasense.db.source_schema import ResearchDocument
 
+        session.execute(text('ALTER TABLE document_chunks DROP CONSTRAINT document_chunks_doc_id_fkey'))
         session.query(ResearchDocument).filter(ResearchDocument.doc_id == "DOC-0001").delete()
         session.commit()
 

@@ -10,16 +10,24 @@ from sqlalchemy.exc import OperationalError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pharmasense.config import CSV_FILES
+from pharmasense.config import CSV_FILES, DATABASE_URL
 from pharmasense.contracts import LOAD_ORDER
 
 _PHASE3_DATABASE_URL = os.environ.get(
     "PHARMASENSE_TEST_DATABASE_URL",
-    os.environ.get(
-        "PHARMASENSE_DATABASE_URL",
-        "postgresql+psycopg2://localhost:5432/pharmasense",
-    ),
+    "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_test"
 )
+
+def _ensure_test_db():
+    base_url = "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense"
+    db_name = "pharmasense_test"
+    from sqlalchemy import create_engine, text
+    eng = create_engine(base_url, isolation_level="AUTOCOMMIT")
+    try:
+        with eng.connect() as conn:
+            conn.execute(text(f"CREATE DATABASE {db_name}"))
+    except Exception:
+        pass
 
 
 def pytest_configure(config):
@@ -38,15 +46,12 @@ def csv_frames():
 
 @pytest.fixture()
 def pgvector_engine():
-    """A Postgres engine with pgvector enabled and all tables created.
-
-    Mirrors tests/test_ingestion.py's `engine` fixture for Phase 1:
-    skipped automatically when no PostgreSQL instance is reachable, so
-    the rest of the suite still runs without a database.
-    """
+    """A Postgres engine with pgvector enabled and all tables created."""
     from pharmasense.db.source_schema import Base
-    import pharmasense.db.models  # noqa: F401 - registers document_chunks on Base.metadata
-
+    import pharmasense.db.models  # noqa: F401
+    
+    _ensure_test_db()
+    
     engine = create_engine(_PHASE3_DATABASE_URL)
     try:
         with engine.connect() as conn:

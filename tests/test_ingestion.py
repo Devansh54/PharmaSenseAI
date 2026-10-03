@@ -16,14 +16,23 @@ from pharmasense.data.ingest.drift import detect_drift
 
 DATABASE_URL = os.environ.get(
     "PHARMASENSE_TEST_DATABASE_URL",
-    os.environ.get(
-        "PHARMASENSE_DATABASE_URL",
-        "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense",
-    ),
+    "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_test"
 )
+
+def _ensure_test_db():
+    base_url = "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense"
+    db_name = "pharmasense_test"
+    from sqlalchemy import create_engine, text
+    eng = create_engine(base_url, isolation_level="AUTOCOMMIT")
+    try:
+        with eng.connect() as conn:
+            conn.execute(text(f"CREATE DATABASE {db_name}"))
+    except Exception:
+        pass
 
 
 def _engine_or_skip():
+    _ensure_test_db()
     engine = create_engine(DATABASE_URL)
     try:
         with engine.connect() as conn:
@@ -36,6 +45,8 @@ def _engine_or_skip():
 @pytest.fixture()
 def engine():
     eng = _engine_or_skip()
+    with eng.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(eng)
     yield eng
     Base.metadata.drop_all(eng)
