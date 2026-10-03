@@ -50,3 +50,24 @@ class DocumentChunk(Base):
     index_version = Column(String(20), nullable=False)
 
     created_at = Column(DateTime, nullable=False)
+
+
+class ReviewTask(Base):
+    __tablename__ = "review_tasks"
+
+    task_id = Column(String(40), primary_key=True)
+    event_id = Column(String(20), ForeignKey("adverse_events.event_id"), nullable=False)
+    status = Column(String(20), nullable=False, default="PENDING")  # PENDING, REVIEWED
+    reason = Column(String(500), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+
+class ReviewDecision(Base):
+    __tablename__ = "review_decisions"
+
+    decision_id = Column(String(40), primary_key=True)
+    task_id = Column(String(40), ForeignKey("review_tasks.task_id"), nullable=False)
+    reviewer_id = Column(String(50), nullable=False)
+    decision = Column(String(50), nullable=False)
+    comments = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False)
