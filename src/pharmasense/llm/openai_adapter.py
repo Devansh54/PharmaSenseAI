@@ -164,9 +164,11 @@ class OpenAIAdapter(LLMProvider):
             )
 
     def complete(self, request: LLMRequest) -> LLMResponse:
+        from pharmasense.validation.pii import scrub_messages
+        scrubbed_messages = scrub_messages(request.messages)
         params: Dict[str, Any] = {
             "model": request.model or self._config.model,
-            "messages": _to_openai_messages(request.messages),
+            "messages": _to_openai_messages(scrubbed_messages),
         }
         tools = _to_openai_tools(request)
         if tools:

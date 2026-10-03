@@ -37,3 +37,5 @@ class WorkflowState(TypedDict):
     specialist_results: Annotated[Dict[str, Any], update_results]
     final_report: Optional[dict]
     errors: Annotated[List[str], append_errors]
+    validation_feedback: Optional[str]
+    evidence_repaired: bool

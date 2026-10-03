@@ -6,6 +6,10 @@ from pharmasense.llm.contracts import LLMProvider
 from pharmasense.orchestration.state import WorkflowState
 from pharmasense.orchestration.planner import PlannerNode
 from pharmasense.orchestration.finalizer import FinalizerNode
+from pharmasense.validation.requests import validate_input_request
+from pharmasense.validation.evidence import validate_evidence
+from pharmasense.validation.outputs import validate_output
+import json
 
 from pharmasense.agents.trial import create_trial_data_analyst
 from pharmasense.agents.literature import create_literature_research_agent
@@ -31,12 +35,12 @@ class SpecialistRunner:
         plan = state.get("plan")
         if not plan:
             return {"errors": [f"Missing plan in {self.name}"]}
-            
+
         task_desc = plan.task_descriptions.get(self.name, state.get("user_prompt", ""))
-        
+
         # Instantiate agent lazily to ensure session is bound
         agent = self.agent_factory(self.session, self.llm)
-        
+
         try:
             result = agent.run(task_desc)
             return {"specialist_results": {self.name: result.model_dump()}}
@@ -47,14 +51,18 @@ class ReportWriterRunner:
     def __init__(self, session: Session, llm: LLMProvider):
         self.session = session
         self.llm = llm
-        
+
     def __call__(self, state: WorkflowState) -> dict:
         findings_str = ""
         for name, res in state.get("specialist_results", {}).items():
             findings_str += f"--- {name} Findings ---\n{res}\n\n"
-            
+
         task_desc = f"Synthesize the following findings into a final report:\n\n{findings_str}"
-        
+
+        feedback = state.get("validation_feedback")
+        if feedback:
+            task_desc += f"\n\nPREVIOUS VALIDATION FAILED. You must fix the report based on this feedback:\n{feedback}"
+
         agent = create_report_writer_agent(self.session, self.llm)
         try:
             result = agent.run(task_desc)
@@ -62,56 +70,114 @@ class ReportWriterRunner:
         except Exception as e:
             return {"errors": [f"Report Writer failed: {str(e)}"]}
 
+class InputGuardrailNode:
+    def __init__(self, llm: LLMProvider):
+        self.llm = llm
+
+    def __call__(self, state: WorkflowState) -> dict:
+        is_valid, reason = validate_input_request(state["user_prompt"], self.llm)
+        if not is_valid:
+            return {
+                "errors": [f"Guardrail blocked request: {reason}"],
+                "final_report": {"report_content": reason}
+            }
+        return {}
+
+class OutputGuardrailNode:
+    def __init__(self, llm: LLMProvider):
+        self.llm = llm
+
+    def __call__(self, state: WorkflowState) -> dict:
+        report_data = state.get("final_report")
+        if not report_data:
+            return {}
+
+        report_text = report_data.get("report_content", "")
+        if not report_text:
+            return {}
+
+        valid_out, out_reason = validate_output(report_text)
+        if not valid_out:
+            return {"errors": [f"Output validation failed: {out_reason}"]}
+
+        context_str = json.dumps(state.get("specialist_results", {}))
+        is_supported, ev_reason = validate_evidence(report_text, context_str, self.llm)
+
+        if not is_supported:
+            if state.get("evidence_repaired"):
+                return {
+                    "final_report": {"report_content": "I am unable to provide a response because the generated claims could not be fully verified against the source evidence."},
+                    "errors": ["Evidence validation failed after repair attempt."]
+                }
+            else:
+                return {
+                    "evidence_repaired": True,
+                    "validation_feedback": f"Unsupported claims detected: {ev_reason}. Please rewrite the report ensuring all claims are strictly supported by the provided findings."
+                }
+
+        return {"validation_feedback": None}
+
 def route_after_planner(state: WorkflowState):
     if state.get("errors"):
         return "finalizer"
-        
+
     plan = state["plan"]
     if not plan:
         return "finalizer"
-        
+
     destinations = []
     for spec in plan.selected_specialists:
         node_name = SPECIALIST_NODE_MAP.get(spec)
         if node_name:
             destinations.append(node_name)
-            
+
     if not destinations:
         return "finalizer"
-        
+
     return destinations
 
 def route_after_specialist(state: WorkflowState):
     if state.get("errors"):
         return "finalizer"
-        
-    plan = state["plan"]
-    if plan and plan.workflow_type == "single":
-        return "finalizer"
+
     return "report_writer"
+
+def route_after_input_guardrail(state: WorkflowState):
+    if state.get("errors"):
+        return "finalizer"
+    return "planner"
+
+def route_after_output_guardrail(state: WorkflowState):
+    if state.get("validation_feedback"):
+        return "report_writer"
+    return "finalizer"
 
 def build_orchestration_graph(session: Session, llm: LLMProvider):
     builder = StateGraph(WorkflowState)
-    
+
+    builder.add_node("input_guardrail", InputGuardrailNode(llm))
     builder.add_node("planner", PlannerNode(llm))
     builder.add_node("trial_agent", SpecialistRunner(create_trial_data_analyst, session, llm, "Trial Data Analyst"))
     builder.add_node("literature_agent", SpecialistRunner(create_literature_research_agent, session, llm, "Literature Research"))
     builder.add_node("ae_triage_agent", SpecialistRunner(create_ae_triage_agent, session, llm, "Adverse Event Triage"))
     builder.add_node("similarity_agent", SpecialistRunner(create_compound_similarity_agent, session, llm, "Compound Similarity"))
-    
+
     builder.add_node("report_writer", ReportWriterRunner(session, llm))
+    builder.add_node("output_guardrail", OutputGuardrailNode(llm))
     builder.add_node("finalizer", FinalizerNode())
-    
-    builder.add_edge(START, "planner")
-    
+
+    builder.add_edge(START, "input_guardrail")
+    builder.add_conditional_edges("input_guardrail", route_after_input_guardrail, ["planner", "finalizer"])
+
     builder.add_conditional_edges("planner", route_after_planner, [
         "trial_agent", "literature_agent", "ae_triage_agent", "similarity_agent", "finalizer"
     ])
-    
+
     for node_name in SPECIALIST_NODE_MAP.values():
         builder.add_conditional_edges(node_name, route_after_specialist, ["report_writer", "finalizer"])
-        
-    builder.add_edge("report_writer", "finalizer")
+
+    builder.add_edge("report_writer", "output_guardrail")
+    builder.add_conditional_edges("output_guardrail", route_after_output_guardrail, ["report_writer", "finalizer"])
     builder.add_edge("finalizer", END)
-    
+
     return builder.compile()
