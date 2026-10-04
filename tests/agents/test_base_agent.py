@@ -47,7 +47,7 @@ def test_base_agent_tool_loop():
         output_model=DummyOutput
     )
     
-    out = agent.run("Do something")
+    out, _ = agent.run("Do something")
     
     assert isinstance(out, DummyOutput)
     assert out.result == "success"

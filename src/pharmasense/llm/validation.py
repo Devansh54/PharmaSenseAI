@@ -24,7 +24,16 @@ def parse_and_validate(content: Optional[str], schema: Optional[Dict[str, Any]])
             "Structured output requested but the provider returned no content."
         )
     try:
-        parsed = json.loads(content)
+        clean_content = content.strip()
+        if clean_content.startswith("```json"):
+            clean_content = clean_content[7:]
+        elif clean_content.startswith("```"):
+            clean_content = clean_content[3:]
+        if clean_content.endswith("```"):
+            clean_content = clean_content[:-3]
+        clean_content = clean_content.strip()
+
+        parsed = json.loads(clean_content)
     except json.JSONDecodeError as exc:
         raise LLMInvalidOutputError(
             f"Structured output is not valid JSON: {exc}", raw_content=content

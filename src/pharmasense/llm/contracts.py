@@ -23,6 +23,7 @@ class Message:
     tool_call_id: Optional[str] = None
     name: Optional[str] = None
     tool_calls: Optional[List[ToolCall]] = None
+    provider_metadata: Optional[Any] = None
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,7 @@ class LLMRequest:
     """A provider-independent request to generate a completion."""
 
     messages: List[Message]
-    model: str
+    model: Optional[str] = None
     tools: Optional[List[ToolSpec]] = None
     tool_choice: Optional[str] = None  # "auto" | "none" | "required"
     response_schema: Optional[Dict[str, Any]] = None  # JSON schema for structured output
@@ -105,6 +106,7 @@ class LLMResponse:
     parsed: Optional[Any] = None
     cost: Optional[CostBreakdown] = None
     raw: Optional[Any] = None
+    provider_metadata: Optional[Any] = None
 
 
 class LLMProvider(abc.ABC):

@@ -58,19 +58,26 @@ class EvaluationRunner:
 
         eval_db_url = os.environ.get("EVAL_DATABASE_URL")
         if not eval_db_url:
-            if not self.is_offline:
-                print("FATAL: EVAL_DATABASE_URL is not set. Refusing to run live benchmark against dev DB.")
-                sys.exit(1)
-            # Safe fallback for offline structural test
-            eval_db_url = DATABASE_URL.replace("/pharmasense", "/pharmasense_test")
-            if not eval_db_url.endswith("_test"):
-                eval_db_url += "_test"
+            print("FATAL: EVAL_DATABASE_URL is not set. Refusing to run live benchmark against dev DB.")
+            sys.exit(1)
 
         self.engine = create_engine(eval_db_url)
         self.session = Session(self.engine)
 
         from pharmasense.llm.gateway import LLMGateway
-        self.gateway = LLMGateway(self.adapter)
+        from pharmasense.config import GatewayConfig
+
+        # Calculate throttling based on provider limits
+        provider_limits = {
+            "gemini": {"rpm": 15, "rpd": 1500},
+            "groq": {"rpm": 30, "rpd": 1000},
+            "openai": {"rpm": 500, "rpd": 10000}
+        }
+        limits = provider_limits.get(self.provider_name, {"rpm": 10, "rpd": 100})
+        self.throttle_delay = 0.0 if self.is_offline else 60.0 / (limits["rpm"] * 0.8)
+
+        gw_config = GatewayConfig(min_delay_seconds=self.throttle_delay)
+        self.gateway = LLMGateway(self.adapter, config=gw_config)
         self.graph = build_orchestration_graph(self.session, self.gateway)
         self.judge = LLMJudge(llm_adapter=self.adapter)
 
@@ -110,6 +117,9 @@ class EvaluationRunner:
                             resp.parsed = {"workflow_type": "single", "selected_specialists": ["Compound Similarity Search"], "task_descriptions": {"Compound Similarity Search": "sim"}, "resolved_entities": {}}
                         else:
                             resp.parsed = {"workflow_type": "single", "selected_specialists": ["Trial Data Analyst"], "task_descriptions": {"Trial Data Analyst": "t"}, "resolved_entities": {}}
+                    if hasattr(resp, "parsed") and resp.parsed is not None:
+                        import json
+                        resp.content = json.dumps(resp.parsed)
                     return resp
             return MockOpenAIAdapter()
 
@@ -141,8 +151,8 @@ class EvaluationRunner:
             self.model_name,
             case_id,
             APP_VERSION,
-            "v1", # prompt_config_version
-            "v1", # tool_definition_version
+            "v2", # prompt_config_version
+            "v2", # tool_definition_version
             self.rag_data_version,
             "0.0" # generation_settings (temperature)
         ]
@@ -154,7 +164,7 @@ class EvaluationRunner:
             return
 
         estimated_calls = len(self.cases) * 5
-        print(f"Pre-flight check: Estimating ~{estimated_calls} API calls for {len(self.cases)} cases.")
+        print(f"Pre-flight check: Estimating up to {estimated_calls} API calls (max) for {len(self.cases)} cases.")
 
         provider_limits = {
             "gemini": {"rpm": 15, "rpd": 1500},
@@ -168,7 +178,6 @@ class EvaluationRunner:
             sys.exit(1)
 
         print("Pre-flight check passed. Quota is sufficient.")
-        self.throttle_delay = 60.0 / (limits["rpm"] * 0.8)
 
     def run(self):
         print("Starting Phase 8 Golden-Set Evaluation...")
@@ -186,10 +195,6 @@ class EvaluationRunner:
                 print(" -> Cache hit. Skipping LLM execution.")
                 results.append(self.run_cache[fingerprint])
                 continue
-
-            if not self.is_offline and i > 0:
-                print(f" -> Pacing: sleeping {self.throttle_delay:.2f}s...")
-                time.sleep(self.throttle_delay)
 
             start_time = time.time()
             final_state = None
@@ -213,6 +218,20 @@ class EvaluationRunner:
 
             if not final_state:
                 failures += 1
+                results.append({
+                    "case_id": case["case_id"],
+                    "latency": time.time() - start_time,
+                    "correctness": 0,
+                    "faithfulness": "N/A",
+                    "relevance": "N/A",
+                    "citation": "N/A",
+                    "routing": "N/A",
+                    "tools": "N/A",
+                    "sql": "N/A",
+                    "hit_at_k": "N/A",
+                    "escalation": "N/A",
+                    "error": "Unhandled Exception"
+                })
                 continue
 
             latency = time.time() - start_time
@@ -227,14 +246,27 @@ class EvaluationRunner:
             if is_failed:
                 failures += 1
 
-            actual_tools = []
+            actual_tools = final_state.get("actual_tools", [])
             all_chunks = []
+            for t in actual_tools:
+                if t.get("tool_name") == "vector_search":
+                    res = t.get("result", {})
+                    if isinstance(res, dict):
+                        chunks = res.get("chunks", [])
+                        if isinstance(chunks, list):
+                            all_chunks.extend(chunks)
+                    elif isinstance(res, list):
+                        all_chunks.extend(res)
+
             context = ""
             for spec_name, spec_result in final_state.get("specialist_results", {}).items():
                 if isinstance(spec_result, dict):
                     context += json.dumps(spec_result) + "\n"
 
-            correctness = check_deterministic_assertions(case.get("expected_assertions", []), report_content) if not is_failed else 0
+            if is_failed:
+                correctness = 0
+            else:
+                correctness = check_deterministic_assertions(case.get("expected_assertions", []), report_content)
 
             if self.is_offline and not case["should_block"] and not case["expected_escalation"]:
                 correctness = "N/A"
@@ -245,12 +277,16 @@ class EvaluationRunner:
             else:
                 expected_wf = case.get("expected_workflow", "N/A")
                 routing = check_routing(expected_wf, case.get("expected_specialists", []), plan)
-                tool_sel = check_tool_selection(case.get("expected_tools", []), actual_tools)
+                actual_tool_names = [t.get("tool_name", "") for t in actual_tools] if actual_tools else []
+                tool_sel = check_tool_selection(case.get("expected_tools", []), actual_tool_names)
                 hit_at_k = compute_hit_at_k(all_chunks, self.labels.get(case["case_id"], []))
                 sql_corr = check_sql_correctness(actual_tools)
 
                 if case["category"] != "retrieval" and not self.labels.get(case["case_id"]):
                     hit_at_k = "N/A"
+
+                # If a non-guardrail non-escalation case failed without selecting tools, hit_at_k etc. should probably just evaluate to 0
+                # (because it didn't retrieve). But if should_block is True, they are definitely N/A.
                 if case["should_block"]:
                     routing = "N/A"
                     tool_sel = "N/A"
@@ -268,7 +304,8 @@ class EvaluationRunner:
             if self.is_offline and not case["expected_escalation"]:
                  escalation = "N/A"
             else:
-                 escalation = check_escalation(case.get("expected_escalation", False), actual_tools)
+                 actual_tool_names = [t.get("tool_name", "") for t in actual_tools] if actual_tools else []
+                 escalation = check_escalation(case.get("expected_escalation", False), actual_tools, is_failed)
                  if self.is_offline and case["expected_escalation"]:
                      escalation = "N/A"
                      correctness = "N/A"
@@ -305,13 +342,14 @@ class EvaluationRunner:
             if self.is_offline:
                 f.write("*(Note: Running without active LLM credentials. All performance-dependent AI metrics are correctly marked as N/A.)*\n\n")
 
-            f.write(f"**Total Cases Run**: {len(results)} / {len(self.cases)}\n")
-            f.write(f"**Overall Failure Rate**: {(failures/len(self.cases))*100:.1f}%\n")
+            f.write(f"**Total Cases Processed**: {len(results)} / {len(self.cases)}\n")
+            f.write(f"**Execution Failure Rate**: {(failures/len(self.cases))*100:.1f}% ({failures} cases crashed or hit unhandled errors)\n")
             if len(results) > 0:
                 avg_latency = sum(r["latency"] for r in results) / len(results)
-                f.write(f"**Average Latency**: {avg_latency:.2f}s\n\n")
+                f.write(f"**Average Latency (processed cases)**: {avg_latency:.2f}s\n\n")
 
             f.write("## Aggregate Metrics\n")
+            f.write("*(Note: Execution failures receive 0 or N/A. Denominators reflect the number of applicable cases for each metric.)*\n\n")
             f.write(f"- Correctness: {safe_sum(results, 'correctness')}\n")
             f.write(f"- Faithfulness: {safe_sum(results, 'faithfulness')}\n")
             f.write(f"- Relevance: {safe_sum(results, 'relevance')}\n")

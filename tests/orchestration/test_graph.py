@@ -20,10 +20,12 @@ def test_single_workflow():
 
     # We must patch the agents so they don't actually call LLM during test
     mock_agent = MagicMock()
-    mock_agent.run.return_value.model_dump.return_value = {"summary": "trial summary", "limitations": []}
+    mock_agent.run.return_value = (MagicMock(), [])
+    mock_agent.run.return_value[0].model_dump.return_value = {"summary": "trial summary", "limitations": []}
 
     mock_report = MagicMock()
-    mock_report.run.return_value.model_dump.return_value = {"report_text": "final", "limitations_noted": [], "citations_resolved": []}
+    mock_report.run.return_value = (MagicMock(), [])
+    mock_report.run.return_value[0].model_dump.return_value = {"report_text": "final", "limitations_noted": [], "citations_resolved": []}
 
     # Temporarily monkeypatch the factory
     original_factory = graph_module.create_trial_data_analyst
@@ -56,13 +58,16 @@ def test_parallel_workflow():
     }
 
     mock_trial_agent = MagicMock()
-    mock_trial_agent.run.return_value.model_dump.return_value = {"summary": "trial", "limitations": []}
+    mock_trial_agent.run.return_value = (MagicMock(), [])
+    mock_trial_agent.run.return_value[0].model_dump.return_value = {"summary": "trial", "limitations": []}
 
     mock_lit_agent = MagicMock()
-    mock_lit_agent.run.return_value.model_dump.return_value = {"findings": "lit", "citations": [], "no_evidence_found": False}
+    mock_lit_agent.run.return_value = (MagicMock(), [])
+    mock_lit_agent.run.return_value[0].model_dump.return_value = {"findings": "lit", "citations": [], "no_evidence_found": False}
 
     mock_report = MagicMock()
-    mock_report.run.return_value.model_dump.return_value = {"report_text": "final", "limitations_noted": [], "citations_resolved": []}
+    mock_report.run.return_value = (MagicMock(), [])
+    mock_report.run.return_value[0].model_dump.return_value = {"report_text": "final", "limitations_noted": [], "citations_resolved": []}
 
     orig_t = graph_module.create_trial_data_analyst
     orig_l = graph_module.create_literature_research_agent
@@ -96,10 +101,12 @@ def test_sequential_workflow():
     }
 
     mock_trial = MagicMock()
-    mock_trial.run.return_value.model_dump.return_value = {"summary": "trial", "limitations": []}
+    mock_trial.run.return_value = (MagicMock(), [])
+    mock_trial.run.return_value[0].model_dump.return_value = {"summary": "trial", "limitations": []}
 
     mock_report = MagicMock()
-    mock_report.run.return_value.model_dump.return_value = {"report_text": "final", "limitations_noted": [], "citations_resolved": []}
+    mock_report.run.return_value = (MagicMock(), [])
+    mock_report.run.return_value[0].model_dump.return_value = {"report_text": "final", "limitations_noted": [], "citations_resolved": []}
 
     orig_t = graph_module.create_trial_data_analyst
     orig_r = graph_module.create_report_writer_agent

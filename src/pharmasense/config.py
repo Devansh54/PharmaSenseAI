@@ -61,6 +61,7 @@ class GatewayConfig:
         default_factory=lambda: RetryPolicy(max_retries=DEFAULT_MAX_RETRIES)
     )
     pricing: Dict[str, Dict[str, float]] = field(default_factory=lambda: dict(DEFAULT_PRICING))
+    min_delay_seconds: float = 0.0
 
 @dataclass(frozen=True)
 class OpenAIAdapterConfig:

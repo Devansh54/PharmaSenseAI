@@ -209,3 +209,26 @@ def test_tracer_records_error_on_exhausted_retry():
 
     assert len(tracer.events) == 1
     assert tracer.events[0].error is not None
+
+
+def test_gateway_request_throttling(monkeypatch):
+    from pharmasense.config import GatewayConfig
+    from pharmasense.llm.contracts import LLMRequest, LLMResponse, Message, Usage
+    import time
+
+    mock_provider = FakeProvider([
+        LLMResponse(content='1', usage=Usage(10, 10, 20)),
+        LLMResponse(content='2', usage=Usage(10, 10, 20)),
+    ])
+    config = GatewayConfig(min_delay_seconds=0.2)
+    gateway = LLMGateway(mock_provider, config=config)
+
+    req = LLMRequest(messages=[Message(role='user', content='hi')])
+    t0 = time.time()
+    gateway.complete(req)
+    t1 = time.time()
+    gateway.complete(req)
+    t2 = time.time()
+
+    assert t2 - t1 >= 0.2
+    assert t1 - t0 < 0.2  # First request shouldn't wait if elapsed time since init \u003E min_delay_seconds (which we set to initially pass)

@@ -6,7 +6,7 @@ class PlannerNode:
         self.llm = llm
         
     def __call__(self, state: WorkflowState) -> dict:
-        prompt = f"""
+        prompt = """
 You are the Router/Planner.
 Given the user prompt, produce a plan.
 Rules:
@@ -20,19 +20,18 @@ Rules:
 - Max 4 parallel investigative branches.
 - Do NOT hallucinate other agents.
 - Validate your workflow type against the chosen agents.
-
-User Prompt: {state['user_prompt']}
 """
         req = LLMRequest(
-            messages=[Message(role="system", content=prompt)],
-            model="gpt-4.1-mini",
+            messages=[
+                Message(role="system", content=prompt.strip()),
+                Message(role="user", content=f"User Prompt: {state['user_prompt']}")
+            ],
+            model="",
             response_schema=Plan.model_json_schema()
         )
         
-        try:
-            res = self.llm.complete(req)
-        except Exception as e:
-            return {"errors": [f"LLM Error: {str(e)}"]}
+        # Do not catch LLM exceptions silently; let them propagate so they aren't masked as fallbacks.
+        res = self.llm.complete(req)
             
         if not res.parsed:
             return {"errors": ["Planner failed to return structured output"]}

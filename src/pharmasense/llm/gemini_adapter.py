@@ -58,6 +58,11 @@ def _to_gemini_messages(messages: List[Message]) -> List[types.Content]:
             contents.append(types.Content(role="user", parts=[part]))
             continue
             
+        if m.role == "model" and getattr(m, "provider_metadata", None):
+            # Preserve raw parts for accurate tool continuation metadata
+            contents.append(types.Content(role=role, parts=m.provider_metadata))
+            continue
+
         parts = []
         if m.content:
             parts.append(types.Part.from_text(text=m.content))
@@ -88,7 +93,7 @@ def _to_gemini_tools(request: LLMRequest) -> Optional[List[types.Tool]]:
             description=t.description,
         )
         if t.parameters:
-            func_decl.parameters = t.parameters
+            func_decl.parameters = _sanitize_schema_for_gemini(t.parameters)
         function_declarations.append(func_decl)
         
     return [types.Tool(function_declarations=function_declarations)]
@@ -123,6 +128,21 @@ def _parse_tool_calls(parts: Any) -> List[ToolCall]:
             ))
     return calls
 
+def _sanitize_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(schema, dict):
+        return schema
+    clean = {}
+    for k, v in schema.items():
+        if k in ("additionalProperties", "title", "default"):
+            continue
+        if isinstance(v, dict):
+            clean[k] = _sanitize_schema_for_gemini(v)
+        elif isinstance(v, list):
+            clean[k] = [_sanitize_schema_for_gemini(i) if isinstance(i, dict) else i for i in v]
+        else:
+            clean[k] = v
+    return clean
+
 class GeminiAdapter(LLMProvider):
     """LLMProvider backed by the Google GenAI SDK."""
     
@@ -155,7 +175,7 @@ class GeminiAdapter(LLMProvider):
             
         if request.response_schema:
             config_kwargs["response_mime_type"] = "application/json"
-            config_kwargs["response_schema"] = request.response_schema
+            config_kwargs["response_schema"] = _sanitize_schema_for_gemini(request.response_schema)
             
         gen_config = types.GenerateContentConfig(**config_kwargs)
         
@@ -172,28 +192,43 @@ class GeminiAdapter(LLMProvider):
         content = None
         tool_calls = []
         finish_reason = None
+        raw_parts = None
         
         if raw.candidates:
             candidate = raw.candidates[0]
             if candidate.content and candidate.content.parts:
                 parts = candidate.content.parts
+                raw_parts = parts
                 # Text content
-                text_parts = [p.text for p in parts if p.text]
+                text_parts = [p.text for p in parts if getattr(p, "text", None)]
                 if text_parts:
                     content = "".join(text_parts)
+                else:
+                    # Fallback: when response_mime_type=application/json is used,
+                    # some SDK versions surface the structured JSON via response.text
+                    # rather than through candidate.content.parts[].text.
+                    top_text = getattr(raw, "text", None)
+                    if top_text:
+                        content = top_text
                 # Tool calls
                 tool_calls = _parse_tool_calls(parts)
             
-            if candidate.finish_reason:
+            if getattr(candidate, "finish_reason", None):
                 finish_reason = candidate.finish_reason.name
+        else:
+            # No candidates — last resort: try raw.text (can occur with some SDK versions)
+            top_text = getattr(raw, "text", None)
+            if top_text:
+                content = top_text
                 
         return LLMResponse(
             content=content,
             tool_calls=tool_calls,
-            usage=_parse_usage(raw.usage_metadata),
+            usage=_parse_usage(getattr(raw, "usage_metadata", None)),
             finish_reason=finish_reason,
             model=model_name,
-            raw=raw
+            raw=raw,
+            provider_metadata=raw_parts
         )
 
     @staticmethod

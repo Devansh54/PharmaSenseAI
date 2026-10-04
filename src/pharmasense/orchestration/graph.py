@@ -42,10 +42,16 @@ class SpecialistRunner:
         agent = self.agent_factory(self.session, self.llm)
 
         try:
-            result = agent.run(task_desc)
-            return {"specialist_results": {self.name: result.model_dump()}}
+            result, executed_tools = agent.run(task_desc)
+            return {
+                "specialist_results": {self.name: result.model_dump()},
+                "actual_tools": executed_tools
+            }
         except Exception as e:
-            return {"errors": [f"{self.name} failed: {str(e)}"]}
+            return {
+                "errors": [f"{self.name} failed: {str(e)}"],
+                "actual_tools": getattr(agent, "executed_tools", [])
+            }
 
 class ReportWriterRunner:
     def __init__(self, session: Session, llm: LLMProvider):
@@ -65,7 +71,7 @@ class ReportWriterRunner:
 
         agent = create_report_writer_agent(self.session, self.llm)
         try:
-            result = agent.run(task_desc)
+            result, _ = agent.run(task_desc)
             return {"final_report": result.model_dump()}
         except Exception as e:
             return {"errors": [f"Report Writer failed: {str(e)}"]}

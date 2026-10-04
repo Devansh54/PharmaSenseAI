@@ -8,6 +8,7 @@ INJECTION_PATTERNS = [
     re.compile(r'you\s+are\s+now', re.IGNORECASE),
     re.compile(r'print\s+your\s+initial\s+instructions', re.IGNORECASE),
     re.compile(r'bypass', re.IGNORECASE),
+    re.compile(r'drop\s+table|delete\s+from\s+[a-z_]+', re.IGNORECASE),
 ]
 
 def detect_injection(text: str) -> bool:
@@ -37,12 +38,11 @@ Respond strictly with a JSON object: {{"is_medical_advice": true}} or {{"is_medi
         "properties": {
             "is_medical_advice": {"type": "boolean"}
         },
-        "required": ["is_medical_advice"],
-        "additionalProperties": False
+        "required": ["is_medical_advice"]
     }
     
     req = LLMRequest(
-        model="gpt-4.1-mini",
+        model=None,
         messages=[Message(role="user", content=prompt)],
         response_schema=schema,
         temperature=0.0

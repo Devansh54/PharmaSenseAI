@@ -95,8 +95,8 @@ def test_security_acceptance_valid_research():
     original_factory = graph_module.create_trial_data_analyst
     
     mock_agent = MagicMock()
-    mock_agent.run.return_value = MagicMock()
-    mock_agent.run.return_value.model_dump.return_value = {"content": "trial results"}
+    mock_agent.run.return_value = (MagicMock(), [])
+    mock_agent.run.return_value[0].model_dump.return_value = {"content": "trial results"}
     graph_module.create_trial_data_analyst = lambda s, l: mock_agent
     
     try:

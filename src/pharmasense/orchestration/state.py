@@ -30,6 +30,13 @@ def append_errors(left: list, right: list) -> list:
         return left
     return left + right
 
+def append_tools(left: list, right: list) -> list:
+    if left is None:
+        left = []
+    if not right:
+        return left
+    return left + right
+
 class WorkflowState(TypedDict):
     request_id: str
     user_prompt: str
@@ -39,3 +46,4 @@ class WorkflowState(TypedDict):
     errors: Annotated[List[str], append_errors]
     validation_feedback: Optional[str]
     evidence_repaired: bool
+    actual_tools: Annotated[List[dict], append_tools]

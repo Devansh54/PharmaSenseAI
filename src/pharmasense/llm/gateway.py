@@ -44,6 +44,8 @@ class LLMGateway(LLMProvider):
         self._provider = provider
         self._config = config or GatewayConfig()
         self._tracer = tracer or NullTracer()
+        import time
+        self._last_request_time = time.time() - self._config.min_delay_seconds
 
     def complete(self, request: LLMRequest) -> LLMResponse:
         """Send `request` to the configured provider and return a
@@ -54,6 +56,14 @@ class LLMGateway(LLMProvider):
         requested structured output, and records a trace event for
         the call. Raises `LLMGatewayError` subclasses on failure.
         """
+        import time
+        if self._config.min_delay_seconds > 0:
+            elapsed = time.time() - self._last_request_time
+            if elapsed < self._config.min_delay_seconds:
+                time.sleep(self._config.min_delay_seconds - elapsed)
+
+        self._last_request_time = time.time()
+
         policy = self._config.retry_policy
         event = self._tracer.start(model=request.model, metadata=dict(request.metadata))
 
