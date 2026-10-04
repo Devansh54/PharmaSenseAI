@@ -9,6 +9,8 @@ from typing import Dict, Optional
 from pharmasense.llm.retry import RetryPolicy
 from pharmasense.llm.usage import DEFAULT_PRICING
 
+APP_VERSION = "0.1.0"
+
 # --- Base Paths ---
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = REPO_ROOT / "pharmasense_synthetic_data_csv"

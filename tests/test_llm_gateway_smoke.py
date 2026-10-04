@@ -31,7 +31,7 @@ def test_live_smoke_generate_returns_a_response():
         messages=[Message(role="user", content="Reply with the single word: pong")],
         model=adapter_config.model,
     )
-    response = gateway.generate(request)
+    response = gateway.complete(request)
 
     assert response.content
     assert response.usage is not None

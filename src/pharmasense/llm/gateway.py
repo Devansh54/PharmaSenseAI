@@ -27,7 +27,7 @@ from pharmasense.llm.validation import parse_and_validate
 logger = logging.getLogger(__name__)
 
 
-class LLMGateway:
+class LLMGateway(LLMProvider):
     """Single governed entry point for all LLM calls.
 
     Per the repository guide (Step 2): "a single, swappable LLM access
@@ -45,7 +45,7 @@ class LLMGateway:
         self._config = config or GatewayConfig()
         self._tracer = tracer or NullTracer()
 
-    def generate(self, request: LLMRequest) -> LLMResponse:
+    def complete(self, request: LLMRequest) -> LLMResponse:
         """Send `request` to the configured provider and return a
         provider-independent `LLMResponse`.
 
@@ -67,14 +67,15 @@ class LLMGateway:
         response.cost = compute_cost(response.usage, request.model, pricing=self._config.pricing)
 
         try:
-            response.parsed = parse_and_validate(response.content, request.response_schema)
+            if request.response_schema and not response.tool_calls:
+                response.parsed = parse_and_validate(response.content, request.response_schema)
         except LLMInvalidOutputError as exc:
             self._tracer.end(
                 event,
                 prompt_tokens=response.usage.prompt_tokens,
                 completion_tokens=response.usage.completion_tokens,
                 total_cost=response.cost.total_cost,
-                tool_call_count=len(response.tool_calls),
+                tool_call_count=len(response.tool_calls) if response.tool_calls else 0,
                 error=str(exc),
             )
             raise
@@ -84,6 +85,7 @@ class LLMGateway:
             prompt_tokens=response.usage.prompt_tokens,
             completion_tokens=response.usage.completion_tokens,
             total_cost=response.cost.total_cost,
-            tool_call_count=len(response.tool_calls),
+            tool_call_count=len(response.tool_calls) if response.tool_calls else 0,
+            tool_names=[tc.name for tc in response.tool_calls] if response.tool_calls else [],
         )
         return response

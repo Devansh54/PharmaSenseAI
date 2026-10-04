@@ -6,7 +6,7 @@ history, rather than a second, disconnected schema.
 """
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text, Float
 
 from pgvector.sqlalchemy import Vector
 
@@ -70,4 +70,58 @@ class ReviewDecision(Base):
     reviewer_id = Column(String(50), nullable=False)
     decision = Column(String(50), nullable=False)
     comments = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+
+
+class RuntimeTrace(Base):
+    """Parent trace for a single complete orchestration request."""
+    __tablename__ = "runtime_traces"
+
+    trace_id = Column(String(50), primary_key=True)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=True)
+    latency_sec = Column(Float, nullable=True)
+    total_cost = Column(Float, nullable=True)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    status = Column(String(20), nullable=False) # SUCCESS, ERROR, BLOCKED
+    error_code = Column(String(100), nullable=True)
+
+    # Versioning
+    app_version = Column(String(20), nullable=False)
+    workflow_version = Column(String(20), nullable=False)
+    dataset_version = Column(String(20), nullable=False)
+
+    escalated = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False)
+
+
+class RuntimeEvent(Base):
+    """Child event representing a single node execution, LLM call, or tool invocation within a trace."""
+    __tablename__ = "runtime_events"
+
+    event_id = Column(String(50), primary_key=True)
+    trace_id = Column(String(50), ForeignKey("runtime_traces.trace_id"), nullable=False)
+    event_type = Column(String(50), nullable=False) # PLANNER, SPECIALIST, TOOL, LLM, GUARDRAIL, FINALIZER
+    node_name = Column(String(100), nullable=False)
+
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=True)
+    latency_sec = Column(Float, nullable=True)
+
+    prompt_version = Column(String(20), nullable=True)
+    tool_version = Column(String(20), nullable=True)
+    model_name = Column(String(50), nullable=True)
+    model_version = Column(String(50), nullable=True)
+    index_version = Column(String(20), nullable=True) # RAG
+
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    total_cost = Column(Float, nullable=True)
+
+    status = Column(String(20), nullable=False) # SUCCESS, ERROR
+
+    # Use Text for serialized JSON metadata.
+    # NEVER store raw user_prompt or raw report_content here.
+    event_metadata = Column(Text, nullable=True)
+
     created_at = Column(DateTime, nullable=False)

@@ -61,7 +61,7 @@ def test_generate_success_returns_content_usage_and_cost():
     )
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=_fast_policy()))
 
-    response = gateway.generate(_basic_request())
+    response = gateway.complete(_basic_request())
 
     assert response.content == "hi there"
     assert response.usage.total_tokens == 15
@@ -76,7 +76,7 @@ def test_generate_passes_through_tool_calls():
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=_fast_policy()))
 
     request = _basic_request(tools=[ToolSpec(name="lookup_compound", description="d", parameters={})])
-    response = gateway.generate(request)
+    response = gateway.complete(request)
 
     assert response.tool_calls == tool_calls
     assert provider.calls[0].tools[0].name == "lookup_compound"
@@ -90,7 +90,7 @@ def test_invalid_structured_output_raises_without_retry():
     request = _basic_request(response_schema=schema)
 
     with pytest.raises(LLMInvalidOutputError):
-        gateway.generate(request)
+        gateway.complete(request)
     assert len(provider.calls) == 1  # invalid output is not transient - no retry
 
 
@@ -100,7 +100,7 @@ def test_structured_output_schema_mismatch_raises():
 
     schema = {"type": "object", "required": ["answer"], "properties": {"answer": {"type": "string"}}}
     with pytest.raises(LLMInvalidOutputError):
-        gateway.generate(_basic_request(response_schema=schema))
+        gateway.complete(_basic_request(response_schema=schema))
 
 
 def test_structured_output_valid_is_parsed():
@@ -108,7 +108,7 @@ def test_structured_output_valid_is_parsed():
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=_fast_policy()))
 
     schema = {"type": "object", "required": ["answer"], "properties": {"answer": {"type": "string"}}}
-    response = gateway.generate(_basic_request(response_schema=schema))
+    response = gateway.complete(_basic_request(response_schema=schema))
 
     assert response.parsed == {"answer": "ok"}
 
@@ -117,7 +117,7 @@ def test_timeout_retries_then_succeeds():
     provider = FakeProvider([LLMTimeoutError("timed out"), LLMResponse(content="second try", usage=Usage(1, 1, 2))])
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=_fast_policy()))
 
-    response = gateway.generate(_basic_request())
+    response = gateway.complete(_basic_request())
 
     assert response.content == "second try"
     assert len(provider.calls) == 2
@@ -129,7 +129,7 @@ def test_timeout_retries_are_bounded_then_raise():
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=policy))
 
     with pytest.raises(LLMTimeoutError):
-        gateway.generate(_basic_request())
+        gateway.complete(_basic_request())
     assert len(provider.calls) == 3  # 1 initial attempt + 2 retries
 
 
@@ -140,7 +140,7 @@ def test_non_transient_provider_error_is_not_retried():
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=_fast_policy()))
 
     with pytest.raises(LLMProviderError):
-        gateway.generate(_basic_request())
+        gateway.complete(_basic_request())
     assert len(provider.calls) == 1
 
 
@@ -148,7 +148,7 @@ def test_missing_usage_is_marked_estimated_and_cost_is_unknown():
     provider = FakeProvider([LLMResponse(content="no usage from provider", usage=None)])
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=_fast_policy()))
 
-    response = gateway.generate(_basic_request())
+    response = gateway.complete(_basic_request())
 
     assert response.usage.is_estimated is True
     assert response.usage.total_tokens == 0
@@ -162,7 +162,7 @@ def test_cost_for_unknown_model_is_flagged_not_zero():
     )
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=_fast_policy()))
 
-    response = gateway.generate(_basic_request(model="some-unpriced-model"))
+    response = gateway.complete(_basic_request(model="some-unpriced-model"))
 
     assert response.cost.pricing_known is False
     assert response.cost.total_cost is None
@@ -177,7 +177,7 @@ def test_cost_calculation_for_known_model_matches_pricing_table():
     )
     gateway = LLMGateway(provider, config=config)
 
-    response = gateway.generate(_basic_request(model="test-model"))
+    response = gateway.complete(_basic_request(model="test-model"))
 
     assert response.cost.prompt_cost == pytest.approx(0.001)
     assert response.cost.completion_cost == pytest.approx(0.002)
@@ -191,7 +191,7 @@ def test_tracer_records_completed_call():
     tracer = InMemoryTracer()
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=_fast_policy()), tracer=tracer)
 
-    gateway.generate(_basic_request())
+    gateway.complete(_basic_request())
 
     assert len(tracer.events) == 1
     assert tracer.events[0].error is None
@@ -205,7 +205,7 @@ def test_tracer_records_error_on_exhausted_retry():
     gateway = LLMGateway(provider, config=GatewayConfig(retry_policy=policy), tracer=tracer)
 
     with pytest.raises(LLMTimeoutError):
-        gateway.generate(_basic_request())
+        gateway.complete(_basic_request())
 
     assert len(tracer.events) == 1
     assert tracer.events[0].error is not None
