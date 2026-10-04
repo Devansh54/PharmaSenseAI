@@ -40,40 +40,60 @@ def _require_gemini() -> None:
 
 def _to_gemini_messages(messages: List[Message]) -> List[types.Content]:
     contents = []
-    # Gemini uses 'user' and 'model' for roles. 'system' must be separated in SDK or provided as system_instruction.
-    # In google-genai SDK, system_instruction is passed at model creation or generation config.
-    # We will assume system messages are handled separately or combined.
-    
-    # For now, let's map 'assistant' to 'model'.
+
+    current_tool_parts = []
+
+    def flush_tools():
+        if current_tool_parts:
+            contents.append(types.Content(role="user", parts=current_tool_parts.copy()))
+            current_tool_parts.clear()
+
     for m in messages:
         if m.role == "system":
-            # Will be extracted out
             continue
-            
+
         role = "model" if m.role == "assistant" else "user"
-        # Tool results need to be formatted properly for Gemini
+
         if m.role == "tool" and m.name:
-            # For tool responses in google-genai:
-            part = types.Part.from_function_response(name=m.name, response={"result": m.content})
-            contents.append(types.Content(role="user", parts=[part]))
+            try:
+                response_dict = json.loads(m.content) if m.content else {}
+            except json.JSONDecodeError:
+                response_dict = {"result": m.content}
+
+            part = types.Part.from_function_response(name=m.name, response=response_dict)
+            current_tool_parts.append(part)
             continue
-            
-        if m.role == "model" and getattr(m, "provider_metadata", None):
-            # Preserve raw parts for accurate tool continuation metadata
+
+        flush_tools()
+
+        if m.role == "assistant" and getattr(m, "provider_metadata", None):
             contents.append(types.Content(role=role, parts=m.provider_metadata))
             continue
 
         parts = []
         if m.content:
             parts.append(types.Part.from_text(text=m.content))
-            
+
         if m.tool_calls:
             for tc in m.tool_calls:
                 parts.append(types.Part.from_function_call(name=tc.name, args=tc.arguments))
-                
+
         contents.append(types.Content(role=role, parts=parts))
-        
-    return contents
+
+    flush_tools()
+
+    # Coalesce consecutive roles of the same type if they exist, though typically function responses
+    # handled above are the main cause. Gemini requires strict alternating user/model.
+    coalesced = []
+    for c in contents:
+        if not coalesced:
+            coalesced.append(c)
+        elif coalesced[-1].role == c.role:
+            coalesced[-1].parts.extend(c.parts)
+        else:
+            coalesced.append(c)
+
+    return coalesced
 
 def _extract_system_instruction(messages: List[Message]) -> Optional[str]:
     system_parts = [m.content for m in messages if m.role == "system" and m.content]
@@ -84,7 +104,7 @@ def _extract_system_instruction(messages: List[Message]) -> Optional[str]:
 def _to_gemini_tools(request: LLMRequest) -> Optional[List[types.Tool]]:
     if not request.tools:
         return None
-    
+
     function_declarations = []
     for t in request.tools:
         # Convert JSON schema to Gemini Schema
@@ -95,17 +115,17 @@ def _to_gemini_tools(request: LLMRequest) -> Optional[List[types.Tool]]:
         if t.parameters:
             func_decl.parameters = _sanitize_schema_for_gemini(t.parameters)
         function_declarations.append(func_decl)
-        
+
     return [types.Tool(function_declarations=function_declarations)]
 
 def _parse_usage(usage_metadata: Any) -> Optional[Usage]:
     if not usage_metadata:
         return None
-        
+
     prompt = getattr(usage_metadata, "prompt_token_count", 0)
     completion = getattr(usage_metadata, "candidates_token_count", 0)
     total = getattr(usage_metadata, "total_token_count", prompt + completion)
-    
+
     return Usage(
         prompt_tokens=prompt,
         completion_tokens=completion,
@@ -117,7 +137,7 @@ def _parse_tool_calls(parts: Any) -> List[ToolCall]:
     calls = []
     if not parts:
         return calls
-        
+
     for p in parts:
         if p.function_call:
             import uuid
@@ -145,22 +165,22 @@ def _sanitize_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
 
 class GeminiAdapter(LLMProvider):
     """LLMProvider backed by the Google GenAI SDK."""
-    
+
     def __init__(self, config: Optional[GeminiAdapterConfig] = None):
         _require_gemini()
         self._config = config or GeminiAdapterConfig()
         # The new SDK uses Client
         self._client = genai.Client(api_key=self._config.api_key)
-        
+
     def complete(self, request: LLMRequest) -> LLMResponse:
         from pharmasense.validation.pii import scrub_messages
         scrubbed_messages = scrub_messages(request.messages)
-        
+
         contents = _to_gemini_messages(scrubbed_messages)
         system_instruction = _extract_system_instruction(scrubbed_messages)
-        
+
         model_name = request.model or self._config.model
-        
+
         config_kwargs = {}
         if system_instruction:
             config_kwargs["system_instruction"] = system_instruction
@@ -168,17 +188,17 @@ class GeminiAdapter(LLMProvider):
             config_kwargs["temperature"] = request.temperature
         if request.max_tokens is not None:
             config_kwargs["max_output_tokens"] = request.max_tokens
-            
+
         tools = _to_gemini_tools(request)
         if tools:
             config_kwargs["tools"] = tools
-            
+
         if request.response_schema:
             config_kwargs["response_mime_type"] = "application/json"
             config_kwargs["response_schema"] = _sanitize_schema_for_gemini(request.response_schema)
-            
+
         gen_config = types.GenerateContentConfig(**config_kwargs)
-        
+
         try:
             raw = self._client.models.generate_content(
                 model=model_name,
@@ -193,26 +213,29 @@ class GeminiAdapter(LLMProvider):
         tool_calls = []
         finish_reason = None
         raw_parts = None
-        
+
         if raw.candidates:
             candidate = raw.candidates[0]
             if candidate.content and candidate.content.parts:
                 parts = candidate.content.parts
                 raw_parts = parts
+
+                # Tool calls
+                tool_calls = _parse_tool_calls(parts)
+
                 # Text content
                 text_parts = [p.text for p in parts if getattr(p, "text", None)]
                 if text_parts:
                     content = "".join(text_parts)
-                else:
+                elif not tool_calls:
                     # Fallback: when response_mime_type=application/json is used,
                     # some SDK versions surface the structured JSON via response.text
                     # rather than through candidate.content.parts[].text.
+                    # Only do this if there are no tool calls, to avoid SDK warnings for function_call parts.
                     top_text = getattr(raw, "text", None)
                     if top_text:
                         content = top_text
-                # Tool calls
-                tool_calls = _parse_tool_calls(parts)
-            
+
             if getattr(candidate, "finish_reason", None):
                 finish_reason = candidate.finish_reason.name
         else:
@@ -220,7 +243,7 @@ class GeminiAdapter(LLMProvider):
             top_text = getattr(raw, "text", None)
             if top_text:
                 content = top_text
-                
+
         return LLMResponse(
             content=content,
             tool_calls=tool_calls,
