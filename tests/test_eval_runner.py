@@ -79,7 +79,7 @@ def test_cache_hit_skips_execution(mock_env, tmp_path, monkeypatch):
 
     with patch.object(runner.graph, "invoke") as mock_invoke:
         # Mock pre_flight to not abort
-        with patch.object(runner, "pre_flight_quota_check"):
+        with patch.object(runner, "pre_flight_checks"):
             runner.run()
             # Since cache hit, invoke should never be called
             mock_invoke.assert_not_called()
@@ -133,7 +133,7 @@ def test_bounded_429_retry_handling(mock_env, tmp_path, monkeypatch):
     ])
 
     with patch.object(runner.graph, "invoke", mock_invoke):
-        with patch.object(runner, "pre_flight_quota_check"):
+        with patch.object(runner, "pre_flight_checks"):
             with patch("time.sleep") as mock_sleep:
                 runner.run()
                 assert mock_invoke.call_count == 3
@@ -141,14 +141,25 @@ def test_bounded_429_retry_handling(mock_env, tmp_path, monkeypatch):
 
 def test_preflight_quota_logic(mock_env, monkeypatch):
     """Pre-flight quota logic blocks an obviously unsafe run without making live API calls."""
-    monkeypatch.setenv("OPENAI_API_KEY", "fake")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    from evals import runner as runner_module
+    monkeypatch.setattr(runner_module, "LLM_PROVIDER_NAME", "gemini")
     runner = EvaluationRunner(is_offline=False)
-    runner.provider_name = "gemini"
     # Make it 400 cases (2000 calls) -> Exceeds gemini's 1500 daily limit
     runner.cases = [{"case_id": f"c_{i}"} for i in range(400)]
 
     with pytest.raises(SystemExit):
-        runner.pre_flight_quota_check()
+        runner.pre_flight_checks()
+
+def test_mode_distinction_no_mock_fallback(mock_env, monkeypatch):
+    """LIVE mode must instantiate real adapters and not silently fall back to mock."""
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
+    from evals import runner as runner_module
+    monkeypatch.setattr(runner_module, "LLM_PROVIDER_NAME", "openai")
+    runner = EvaluationRunner(is_offline=False)
+    assert not runner.is_offline
+    # Ensure it's not the internal MockOpenAIAdapter
+    assert runner.adapter.__class__.__name__ == "OpenAIAdapter"
 
 def test_missing_eval_database_url_fails(monkeypatch):
     """Missing EVAL_DATABASE_URL prevents benchmark execution before any case/API call occurs."""
@@ -178,7 +189,7 @@ def test_case_failure_isolation(mock_env, tmp_path, monkeypatch):
     ])
 
     with patch.object(runner.graph, "invoke", mock_invoke):
-        with patch.object(runner, "pre_flight_quota_check"):
+        with patch.object(runner, "pre_flight_checks"):
             with patch.object(runner, "_write_report") as mock_write:
                 runner.run()
                 assert mock_invoke.call_count == 2
@@ -226,7 +237,7 @@ def test_metrics_instrumentation_actual_tools(mock_env, monkeypatch):
 
     mock_invoke = MagicMock(return_value=final_state)
     with patch.object(runner.graph, "invoke", mock_invoke):
-        with patch.object(runner, "pre_flight_quota_check"):
+        with patch.object(runner, "pre_flight_checks"):
             with patch.object(runner, "_write_report") as mock_write:
                 runner.run()
                 results, _ = mock_write.call_args[0]

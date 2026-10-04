@@ -159,10 +159,51 @@ class EvaluationRunner:
         key_str = "|".join(key_parts)
         return hashlib.sha256(key_str.encode()).hexdigest()
 
-    def pre_flight_quota_check(self):
+    def pre_flight_checks(self):
         if self.is_offline:
+            print("Running in OFFLINE mode (mock structural evaluation).")
             return
 
+        print(f"Running in LIVE mode (Provider: {self.provider_name}, Model: {self.model_name}).")
+
+        # 1. API Key validation for the chosen provider
+        if self.provider_name == "gemini" and not os.environ.get("GEMINI_API_KEY"):
+            print("FATAL: GEMINI_API_KEY is missing but provider is gemini.")
+            sys.exit(1)
+        elif self.provider_name == "groq" and not os.environ.get("GROQ_API_KEY"):
+            print("FATAL: GROQ_API_KEY is missing but provider is groq.")
+            sys.exit(1)
+        elif self.provider_name == "openai" and not os.environ.get("OPENAI_API_KEY"):
+            print("FATAL: OPENAI_API_KEY is missing but provider is openai.")
+            sys.exit(1)
+
+        # 2. Database validation and initialization
+        eval_db_url = os.environ.get("EVAL_DATABASE_URL")
+        if not eval_db_url:
+            print("FATAL: EVAL_DATABASE_URL is not set. Refusing to run live benchmark against dev DB.")
+            sys.exit(1)
+
+        try:
+            from sqlalchemy import create_engine
+            eng = create_engine(eval_db_url)
+            with eng.connect() as conn:
+                pass
+        except Exception as e:
+            print(f"FATAL: Database connection failed: {e}")
+            sys.exit(1)
+
+        try:
+            from alembic import command
+            from alembic.config import Config
+            alembic_cfg = Config("alembic.ini")
+            alembic_cfg.set_main_option("sqlalchemy.url", eval_db_url)
+            command.upgrade(alembic_cfg, "head")
+            print("Database schema initialized successfully.")
+        except Exception as e:
+            print(f"FATAL: Failed to run Alembic migrations on evaluation database: {e}")
+            sys.exit(1)
+
+        # 3. Quota check
         estimated_calls = len(self.cases) * 5
         print(f"Pre-flight check: Estimating up to {estimated_calls} API calls (max) for {len(self.cases)} cases.")
 
@@ -171,17 +212,16 @@ class EvaluationRunner:
             "groq": {"rpm": 30, "rpd": 1000},
             "openai": {"rpm": 500, "rpd": 10000}
         }
-
         limits = provider_limits.get(self.provider_name, {"rpm": 10, "rpd": 100})
         if estimated_calls > limits["rpd"]:
             print(f"FATAL: Estimated {estimated_calls} calls exceed daily limit of {limits['rpd']} for {self.provider_name}.")
             sys.exit(1)
 
-        print("Pre-flight check passed. Quota is sufficient.")
+        print("Pre-flight checks passed.")
 
     def run(self):
         print("Starting Phase 8 Golden-Set Evaluation...")
-        self.pre_flight_quota_check()
+        self.pre_flight_checks()
 
         results = []
         total_latency = 0.0
@@ -347,6 +387,21 @@ class EvaluationRunner:
             if len(results) > 0:
                 avg_latency = sum(r["latency"] for r in results) / len(results)
                 f.write(f"**Average Latency (processed cases)**: {avg_latency:.2f}s\n\n")
+
+            try:
+                from sqlalchemy import text
+                res = self.session.execute(text("SELECT COUNT(*), SUM(prompt_tokens), SUM(completion_tokens) FROM runtime_events WHERE event_type='LLM'")).fetchone()
+                total_calls = res[0] or 0
+                prompt_tokens = res[1] or 0
+                comp_tokens = res[2] or 0
+
+                err_res = self.session.execute(text("SELECT COUNT(*) FROM runtime_events WHERE event_type='LLM' AND status='ERROR'")).scalar() or 0
+
+                f.write("## Telemetry & Accounting\n")
+                f.write(f"- **Total LLM Calls**: {total_calls} ({total_calls - err_res} successful, {err_res} retries/errors)\n")
+                f.write(f"- **Total Tokens**: {prompt_tokens + comp_tokens} ({prompt_tokens} prompt, {comp_tokens} completion)\n\n")
+            except Exception as e:
+                f.write(f"*(Telemetry metrics unavailable: {e})*\n\n")
 
             f.write("## Aggregate Metrics\n")
             f.write("*(Note: Execution failures receive 0 or N/A. Denominators reflect the number of applicable cases for each metric.)*\n\n")
