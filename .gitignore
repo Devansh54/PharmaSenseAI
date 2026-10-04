@@ -9,3 +9,7 @@ build/
 dist/
 *.egg-info/
 provenance/*.json
+
+# Evaluation artifacts
+evals/.cache/
+docs/evaluation_report.md
