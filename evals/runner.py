@@ -79,7 +79,7 @@ class EvaluationRunner:
         gw_config = GatewayConfig(min_delay_seconds=self.throttle_delay)
         self.gateway = LLMGateway(self.adapter, config=gw_config)
         self.graph = build_orchestration_graph(self.session, self.gateway)
-        self.judge = LLMJudge(llm_adapter=self.adapter)
+        self.judge = LLMJudge(llm_adapter=self.gateway)
 
     def _compute_rag_version(self) -> str:
         hasher = hashlib.sha256()

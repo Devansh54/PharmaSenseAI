@@ -99,3 +99,9 @@ class LLMGateway(LLMProvider):
             tool_names=[tc.name for tc in response.tool_calls] if response.tool_calls else [],
         )
         return response
+
+    def _translate_error(self, exc: Exception) -> Exception:
+        """Delegate error translation to the underlying provider."""
+        if hasattr(self._provider, "_translate_error"):
+            return self._provider._translate_error(exc)
+        return exc

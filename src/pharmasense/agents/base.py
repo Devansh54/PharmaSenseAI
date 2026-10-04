@@ -84,14 +84,24 @@ class BaseAgent:
             )
 
             # 2. Invoke LLM Gateway
-            res = self.llm.complete(req)
+            from pharmasense.llm.contracts import LLMGatewayError
 
-            # 3. Check for final parsed output
-            if res.parsed:
-                return self.output_model.model_validate(res.parsed), self.executed_tools
+            try:
+                res = self.llm.complete(req)
 
-            if not res.tool_calls:
-                raise RuntimeError("LLM returned no tool calls and no valid parsed output.")
+                # 3. Check for final parsed output
+                if res.parsed:
+                    return self.output_model.model_validate(res.parsed), self.executed_tools
+
+                if not res.tool_calls:
+                    raise RuntimeError("LLM returned no tool calls and no valid parsed output.")
+
+            except (LLMGatewayError, RuntimeError) as e:
+                error_str = str(e)
+                if "Structured output parsing failed" in error_str or "no valid parsed output" in error_str:
+                    messages.append(Message(role="user", content=f"Your previous response was invalid. Error: {error_str}. Please correct it and output strictly the requested JSON schema or tool call."))
+                    continue
+                raise
 
             # 4. Append Assistant's tool request
             messages.append(

@@ -1,5 +1,6 @@
 import re
 from pharmasense.llm.contracts import LLMProvider, LLMRequest, Message
+from pharmasense.config import DEFAULT_MODEL
 
 def check_citations_exist(report: str) -> bool:
     """
@@ -47,7 +48,7 @@ Respond strictly with a JSON object:
     }
     
     req = LLMRequest(
-        model="gpt-4.1-mini",
+        model=DEFAULT_MODEL,
         messages=[Message(role="user", content=prompt)],
         response_schema=schema,
         temperature=0.0
