@@ -105,9 +105,10 @@ class LLMJudge:
         rubric = self.rubrics[metric_name]
         
         req = LLMRequest(
-            model="gpt-4o",
-            system_prompt=system_prompt + f"\n\nRubric:\n{rubric['rubric']}",
-            user_prompt=user_prompt,
+            messages=[
+                Message(role="system", content=system_prompt + f"\n\nRubric:\n{rubric['rubric']}"),
+                Message(role="user", content=user_prompt)
+            ],
             temperature=0.0,
             response_schema=rubric["schema"]
         )

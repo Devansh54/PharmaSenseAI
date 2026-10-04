@@ -38,12 +38,18 @@ def main():
     # Load cases
     cases = load_jsonl(GOLDEN_SET_PATH)
     labels = {l["case_id"]: l["expected_doc_ids"] for l in load_jsonl(RETRIEVAL_LABELS_PATH)}
-    # Init DB and Graph
-    engine = create_engine(DATABASE_URL)
+    # Init DB and Graph (Isolate to test DB)
+    eval_db_url = DATABASE_URL.replace("/pharmasense", "/pharmasense_test")
+    if not eval_db_url.endswith("_test"):
+        eval_db_url += "_test"
+        
+    engine = create_engine(eval_db_url)
     session = Session(engine)
     
     import os
     from pharmasense.llm.contracts import LLMResponse, Usage, CostBreakdown
+    from pharmasense.config import LLM_PROVIDER_NAME
+    
     class MockOpenAIAdapter:
         def __init__(self, *args, **kwargs):
             self.model = "gpt-4o"
@@ -78,13 +84,23 @@ def main():
                 
             return resp
 
-    is_offline = not bool(os.environ.get("OPENAI_API_KEY"))
+    has_openai = bool(os.environ.get("OPENAI_API_KEY"))
+    has_gemini = bool(os.environ.get("GEMINI_API_KEY"))
+    
+    is_offline = not (has_openai or has_gemini)
+    
     if not is_offline:
-        llm = OpenAIAdapter()
+        if LLM_PROVIDER_NAME.lower() == "gemini":
+            from pharmasense.llm.gemini_adapter import GeminiAdapter
+            llm = GeminiAdapter()
+        else:
+            llm = OpenAIAdapter()
     else:
         llm = MockOpenAIAdapter()
         
-    graph = build_orchestration_graph(session, llm)
+    from pharmasense.llm.gateway import LLMGateway
+    gateway = LLMGateway(llm)
+    graph = build_orchestration_graph(session, gateway)
     
     # Init explicit Judge
     judge = LLMJudge(llm_adapter=llm)

@@ -55,7 +55,7 @@ def _require_openai() -> None:
     if openai is None:  # pragma: no cover
         raise LLMProviderError(
             "The 'openai' package is required to use OpenAIAdapter. "
-            "Install it via requirements.txt.",
+            "Install it via pyproject.toml / uv.",
             transient=False,
         )
 

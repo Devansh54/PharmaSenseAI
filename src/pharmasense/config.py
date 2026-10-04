@@ -9,7 +9,12 @@ from typing import Dict, Optional
 from pharmasense.llm.retry import RetryPolicy
 from pharmasense.llm.usage import DEFAULT_PRICING
 
-APP_VERSION = "0.1.0"
+import importlib.metadata
+
+try:
+    APP_VERSION = importlib.metadata.version("pharmasenseai")
+except importlib.metadata.PackageNotFoundError:
+    APP_VERSION = "0.1.0-dev"
 
 # --- Base Paths ---
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -35,13 +40,16 @@ DATABASE_URL = os.environ.get(
 )
 
 # --- LLM Gateway ---
-DEFAULT_MODEL = os.environ.get("PHARMASENSE_LLM_MODEL", "gpt-4o-mini")
+LLM_PROVIDER_NAME = os.environ.get("LLM_PROVIDER", "openai")
+DEFAULT_MODEL = os.environ.get("LLM_MODEL", os.environ.get("PHARMASENSE_LLM_MODEL", "gpt-4o-mini"))
 DEFAULT_TIMEOUT_SECONDS = float(os.environ.get("PHARMASENSE_LLM_TIMEOUT_SECONDS", "30"))
 DEFAULT_MAX_RETRIES = int(os.environ.get("PHARMASENSE_LLM_MAX_RETRIES", "2"))
 
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
 OPENAI_BASE_URL_ENV = "OPENAI_BASE_URL"
 OPENAI_ORG_ENV = "OPENAI_ORG_ID"
+
+GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 
 @dataclass(frozen=True)
 class GatewayConfig:
@@ -60,6 +68,16 @@ class OpenAIAdapterConfig:
     api_key: Optional[str] = field(default_factory=lambda: os.environ.get(OPENAI_API_KEY_ENV))
     base_url: Optional[str] = field(default_factory=lambda: os.environ.get(OPENAI_BASE_URL_ENV))
     organization: Optional[str] = field(default_factory=lambda: os.environ.get(OPENAI_ORG_ENV))
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+
+    def is_configured(self) -> bool:
+        return bool(self.api_key)
+
+@dataclass(frozen=True)
+class GeminiAdapterConfig:
+    """Configuration specific to the Gemini SDK adapter."""
+    model: str = DEFAULT_MODEL
+    api_key: Optional[str] = field(default_factory=lambda: os.environ.get(GEMINI_API_KEY_ENV))
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
 
     def is_configured(self) -> bool:
