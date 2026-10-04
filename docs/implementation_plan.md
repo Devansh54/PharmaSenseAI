@@ -18,9 +18,9 @@
 - **Phase 4 (Tested Tool Library):** ✅ Complete. Implemented 6 deterministic core tools, added Review tables, achieved >90% test coverage.
 - **Phase 5 (Specialist Agents):** ✅ Complete. Built 5 bounded agents on the Phase 2 LLM Gateway with strict per-agent tool registries.
 - **Phase 6 (Router + Orchestration):** ✅ Complete. Implemented stateful router, single/sequential/parallel LangGraph workflows, explicit fan-in boundaries, and strict validation.
-- Phase 7: Guardrails
-- Phase 8: Golden-Set Evaluation
-- Phase 9: Observability Completion
+- **Phase 7 (Guardrails):** ✅ Complete. Implemented deterministic offline PII verification and InputGuardrailNode.
+- **Phase 8 (Golden-Set Evaluation):** ✅ Complete. Integrated Ragas-based structural evaluation against 28-case golden dataset.
+- **Phase 9 (Observability Completion):** ✅ Complete. Wired full SQL-backed telemetry tracking of trace state and cost/tokens.
 - Phase 10: API + Frontend
 - Phase 11: Portable Deployment
 - Phase 12: Documentation + Final Regression + Demo
