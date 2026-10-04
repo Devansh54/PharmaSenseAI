@@ -6,7 +6,7 @@ The master evaluation pipeline has been fully audited and repaired. The followin
 1. **Gemini Continuation**: Model-generated tool call context and parameters are strictly preserved and coalesced correctly in multi-turn history.
 2. **LLMJudge Traceability**: The `LLMJudge` now evaluates using the `LLMGateway` (instead of bypassing it), ensuring that judge calls participate in throttling, structured parsing, and telemetry.
 3. **LIVE Mode Enforcement**: The pipeline distinguishes between LIVE and OFFLINE execution without silently falling back to mocked adapters when credentials mismatch or fail.
-4. **Telemetry Initialization**: The pre-flight checks programmatically invoke Alembic migrations to guarantee the evaluation database (`EVAL_DATABASE_URL`) contains all required telemetry schemas (e.g., `runtime_traces`, `runtime_events`) prior to case execution.
+4. **Telemetry Initialization & Isolation**: The pre-flight checks programmatically invoke Alembic migrations to guarantee the evaluation database (`EVAL_DATABASE_URL`) contains all required telemetry schemas (e.g., `runtime_traces`, `runtime_events`) prior to case execution. Migration targeting is strictly isolated from the development `DATABASE_URL` and verified by regression test.
 5. **Robust Pre-Flight**: Execution strictly validates the required API key for the chosen provider, checks database connectivity, ensures schema parity, and enforces rate-limit constraints before beginning execution.
 
 ## Execution Requirements

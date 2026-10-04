@@ -18,38 +18,42 @@ if not logger.handlers:
 
 class TelemetryManager:
     """Manages telemetry traces and events."""
-    
+
     def __init__(self, session: Session):
         self.session = session
-        
+
     def start_trace(self, trace_id: Optional[str] = None, dataset_version: str = "1.0.0", workflow_version: str = "1.0.0") -> str:
         """Starts a new trace and returns the trace_id."""
         trace_id = trace_id or str(uuid.uuid4())
-        trace = RuntimeTrace(
-            trace_id=trace_id,
-            start_time=datetime.datetime.utcnow(),
-            status="RUNNING",
-            app_version=APP_VERSION if hasattr(APP_VERSION, 'upper') else "1.0.0",
-            workflow_version=workflow_version,
-            dataset_version=dataset_version,
-            created_at=datetime.datetime.utcnow(),
-            total_tokens=0,
-            total_cost=0.0
-        )
-        self.session.add(trace)
-        self.session.commit()
-        logger.info(f"Trace started: {trace_id}")
+        try:
+            trace = RuntimeTrace(
+                trace_id=trace_id,
+                start_time=datetime.datetime.utcnow(),
+                status="RUNNING",
+                app_version=APP_VERSION if hasattr(APP_VERSION, 'upper') else "1.0.0",
+                workflow_version=workflow_version,
+                dataset_version=dataset_version,
+                created_at=datetime.datetime.utcnow(),
+                total_tokens=0,
+                total_cost=0.0
+            )
+            self.session.add(trace)
+            self.session.commit()
+            logger.info(f"Trace started: {trace_id}")
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to start telemetry trace {trace_id}: {e}")
         return trace_id
-        
-    def log_event(self, trace_id: str, event_type: str, node_name: str, 
-                  start_time: datetime.datetime, end_time: datetime.datetime, 
+
+    def log_event(self, trace_id: str, event_type: str, node_name: str,
+                  start_time: datetime.datetime, end_time: datetime.datetime,
                   status: str, metadata: Optional[Dict[str, Any]] = None,
                   prompt_tokens: int = 0, completion_tokens: int = 0, total_cost: float = 0.0) -> str:
         """Logs a single event tied to a trace. PII MUST BE REDACTED from metadata before passing."""
-        
+
         event_id = str(uuid.uuid4())
         latency = (end_time - start_time).total_seconds()
-        
+
         # Ensure metadata contains no raw user prompts or report content
         clean_metadata = None
         if metadata:
@@ -59,48 +63,57 @@ class TelemetryManager:
             if "report_content" in metadata:
                 metadata["report_content"] = "[REDACTED]"
             clean_metadata = json.dumps(metadata)
-            
-        event = RuntimeEvent(
-            event_id=event_id,
-            trace_id=trace_id,
-            event_type=event_type,
-            node_name=node_name,
-            start_time=start_time,
-            end_time=end_time,
-            latency_sec=latency,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_cost=total_cost,
-            status=status,
-            event_metadata=clean_metadata,
-            created_at=datetime.datetime.utcnow()
-        )
-        self.session.add(event)
-        
-        # Accumulate trace totals
-        trace = self.session.query(RuntimeTrace).filter_by(trace_id=trace_id).first()
-        if trace:
-            trace.total_tokens += (prompt_tokens + completion_tokens)
-            if trace.total_cost is None:
-                trace.total_cost = 0.0
-            trace.total_cost += total_cost
-            if "escalate" in node_name.lower() or (metadata and "escalat" in metadata.get("tool", "")):
-                trace.escalated = True
-                
-        self.session.commit()
+
+        try:
+            event = RuntimeEvent(
+                event_id=event_id,
+                trace_id=trace_id,
+                event_type=event_type,
+                node_name=node_name,
+                start_time=start_time,
+                end_time=end_time,
+                latency_sec=latency,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_cost=total_cost,
+                status=status,
+                event_metadata=clean_metadata,
+                created_at=datetime.datetime.utcnow()
+            )
+            self.session.add(event)
+
+            # Accumulate trace totals
+            trace = self.session.query(RuntimeTrace).filter_by(trace_id=trace_id).first()
+            if trace:
+                trace.total_tokens += (prompt_tokens + completion_tokens)
+                if trace.total_cost is None:
+                    trace.total_cost = 0.0
+                trace.total_cost += total_cost
+                if "escalate" in node_name.lower() or (metadata and "escalat" in metadata.get("tool", "")):
+                    trace.escalated = True
+
+            self.session.commit()
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to log telemetry event {event_id} for trace {trace_id}: {e}")
+
         return event_id
-        
+
     def end_trace(self, trace_id: str, status: str, end_time: datetime.datetime, error_code: Optional[str] = None):
         """Ends the trace."""
-        trace = self.session.query(RuntimeTrace).filter_by(trace_id=trace_id).first()
-        if trace:
-            trace.end_time = end_time
-            trace.latency_sec = (end_time - trace.start_time).total_seconds()
-            trace.status = status
-            if error_code:
-                trace.error_code = error_code
-            self.session.commit()
-            logger.info(f"Trace ended: {trace_id} | Status: {status} | Latency: {trace.latency_sec:.2f}s | Tokens: {trace.total_tokens} | Cost: ${trace.total_cost:.4f}")
+        try:
+            trace = self.session.query(RuntimeTrace).filter_by(trace_id=trace_id).first()
+            if trace:
+                trace.end_time = end_time
+                trace.latency_sec = (end_time - trace.start_time).total_seconds()
+                trace.status = status
+                if error_code:
+                    trace.error_code = error_code
+                self.session.commit()
+                logger.info(f"Trace ended: {trace_id} | Status: {status} | Latency: {trace.latency_sec:.2f}s | Tokens: {trace.total_tokens} | Cost: ${trace.total_cost:.4f}")
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to end telemetry trace {trace_id}: {e}")
 
 from pharmasense.llm.tracing import Tracer, TraceEvent
 from pharmasense.observability.context import current_trace_id, current_node_name
@@ -126,15 +139,15 @@ class TelemetryTracer(Tracer):
         event.ended_at = time.time()
         for k, v in fields.items():
             setattr(event, k, v)
-        
+
         status = "ERROR" if event.error else "SUCCESS"
         node_name = current_node_name.get() or "LLMGateway"
-        
+
         # Inject tool calls into metadata for escalation tracking
         if fields.get("tool_names"):
             event.metadata["tool"] = fields["tool_names"][0]
             event.metadata["tool_names"] = fields["tool_names"]
-            
+
         # Log to DB
         self.telemetry_manager.log_event(
             trace_id=event.request_id,

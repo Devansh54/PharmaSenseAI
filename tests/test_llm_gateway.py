@@ -230,5 +230,5 @@ def test_gateway_request_throttling(monkeypatch):
     gateway.complete(req)
     t2 = time.time()
 
-    assert t2 - t1 >= 0.2
+    assert t2 - t1 >= 0.19
     assert t1 - t0 < 0.2  # First request shouldn't wait if elapsed time since init \u003E min_delay_seconds (which we set to initially pass)

@@ -20,9 +20,16 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-config.set_main_option(
-    "sqlalchemy.url", os.environ.get("PHARMASENSE_DATABASE_URL", DATABASE_URL)
-)
+existing_url = config.get_main_option("sqlalchemy.url")
+if not existing_url:
+    # If EVAL_DATABASE_URL is set, it means this is an evaluation run or context where eval isolation is required.
+    # We must not silently fall back to DATABASE_URL if EVAL_DATABASE_URL is provided for this run.
+    eval_db = os.environ.get("EVAL_DATABASE_URL")
+    if eval_db:
+        url = eval_db
+    else:
+        url = os.environ.get("PHARMASENSE_DATABASE_URL", DATABASE_URL)
+    config.set_main_option("sqlalchemy.url", url)
 
 
 def run_migrations_offline() -> None:
