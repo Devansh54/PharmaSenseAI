@@ -50,6 +50,7 @@ OPENAI_BASE_URL_ENV = "OPENAI_BASE_URL"
 OPENAI_ORG_ENV = "OPENAI_ORG_ID"
 
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+GROQ_API_KEY_ENV = "GROQ_API_KEY"
 
 @dataclass(frozen=True)
 class GatewayConfig:
@@ -78,6 +79,16 @@ class GeminiAdapterConfig:
     """Configuration specific to the Gemini SDK adapter."""
     model: str = DEFAULT_MODEL
     api_key: Optional[str] = field(default_factory=lambda: os.environ.get(GEMINI_API_KEY_ENV))
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+
+    def is_configured(self) -> bool:
+        return bool(self.api_key)
+
+@dataclass(frozen=True)
+class GroqAdapterConfig:
+    """Configuration specific to the Groq SDK adapter."""
+    model: str = DEFAULT_MODEL
+    api_key: Optional[str] = field(default_factory=lambda: os.environ.get(GROQ_API_KEY_ENV))
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
 
     def is_configured(self) -> bool:

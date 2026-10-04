@@ -94,16 +94,56 @@ def check_deterministic_assertions(expected_assertions: List[str], actual_output
                 return 0
     return 1
 
+import hashlib
+import os
+from pathlib import Path
+
 class LLMJudge:
     def __init__(self, llm_adapter):
         self.llm = llm_adapter
-        
-        with open("evals/rubrics.json", "r") as f:
-            self.rubrics = json.load(f)
-            
-    def _evaluate(self, metric_name: str, system_prompt: str, user_prompt: str) -> Optional[int]:
+        self.cache_path = Path("evals/.cache/judge_cache.json")
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self.cache = self._load_cache()
+
+        rubrics_path = Path("evals/rubrics.json")
+        if rubrics_path.exists():
+            with open(rubrics_path, "r") as f:
+                content = f.read()
+                self.rubrics = json.loads(content)
+                self.rubric_version = hashlib.sha256(content.encode()).hexdigest()[:8]
+        else:
+            self.rubrics = {}
+            self.rubric_version = "missing"
+
+    def _load_cache(self) -> dict:
+        if self.cache_path.exists():
+            try:
+                with open(self.cache_path, "r") as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        return {}
+
+    def _save_cache(self):
+        with open(self.cache_path, "w") as f:
+            json.dump(self.cache, f, indent=2)
+
+    def _get_cache_key(self, metric_name: str, answer: str) -> str:
+        report_hash = hashlib.sha256(answer.encode()).hexdigest()
+        provider = getattr(self.llm, "_config", type(self.llm).__name__)
+        model = getattr(provider, "model", "default")
+        provider_name = type(self.llm).__name__
+
+        key_str = f"{report_hash}_{provider_name}_{model}_{metric_name}_{self.rubric_version}"
+        return hashlib.sha256(key_str.encode()).hexdigest()
+
+    def _evaluate(self, metric_name: str, system_prompt: str, user_prompt: str, answer: str) -> Optional[int]:
+        cache_key = self._get_cache_key(metric_name, answer)
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
         rubric = self.rubrics[metric_name]
-        
+
         req = LLMRequest(
             messages=[
                 Message(role="system", content=system_prompt + f"\n\nRubric:\n{rubric['rubric']}"),
@@ -112,26 +152,32 @@ class LLMJudge:
             temperature=0.0,
             response_schema=rubric["schema"]
         )
-        
-        resp = self.llm.complete(req)
-        if resp.parsed and "score" in resp.parsed:
-            return resp.parsed["score"]
+
+        try:
+            resp = self.llm.complete(req)
+            if resp.parsed and "score" in resp.parsed:
+                score = resp.parsed["score"]
+                self.cache[cache_key] = score
+                self._save_cache()
+                return score
+        except Exception as e:
+            print(f"Judge failed: {e}")
         return None
 
     def evaluate_faithfulness(self, query: str, context: str, answer: str) -> Optional[int]:
         """LLM Judge: Faithfulness"""
         if not answer or answer == "N/A":
             return None
-            
+
         sys_prompt = "You are an objective judge evaluating the faithfulness of a generated answer. Determine if the answer is fully supported by the provided context."
         usr_prompt = f"Query: {query}\n\nContext:\n{context}\n\nAnswer:\n{answer}"
-        return self._evaluate("faithfulness", sys_prompt, usr_prompt)
+        return self._evaluate("faithfulness", sys_prompt, usr_prompt, answer)
 
     def evaluate_relevance(self, query: str, answer: str) -> Optional[int]:
         """LLM Judge: Relevance"""
         if not answer or answer == "N/A":
             return None
-            
+
         sys_prompt = "You are an objective judge evaluating the relevance of a generated answer. Determine if the answer directly addresses the user's query."
         usr_prompt = f"Query: {query}\n\nAnswer:\n{answer}"
-        return self._evaluate("relevance", sys_prompt, usr_prompt)
+        return self._evaluate("relevance", sys_prompt, usr_prompt, answer)
