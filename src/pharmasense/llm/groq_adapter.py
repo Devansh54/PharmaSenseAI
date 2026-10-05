@@ -94,7 +94,15 @@ def _to_groq_tools(request: LLMRequest) -> Optional[List[Dict[str, Any]]]:
 def _to_groq_response_format(request: LLMRequest) -> Optional[Dict[str, Any]]:
     if not request.response_schema:
         return None
-    return {"type": "json_object"}
+    # Current Groq allows json_schema if a strict schema is known
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "structured_output",
+            "schema": request.response_schema,
+            "strict": True
+        }
+    }
 
 
 def _parse_tool_calls(message: Any) -> List[ToolCall]:
@@ -154,9 +162,16 @@ class GroqAdapter(LLMProvider):
         if tools:
             params["tools"] = tools
             params["tool_choice"] = request.tool_choice or "auto"
-        response_format = _to_groq_response_format(request)
-        if response_format:
-            params["response_format"] = response_format
+        else:
+            response_format = _to_groq_response_format(request)
+            if response_format:
+                params["response_format"] = response_format
+                
+                # Ensure the prompt contains 'json' if json_object is used (or even json_schema to be safe)
+                has_json = any("json" in str(m.get("content", "")).lower() for m in params["messages"])
+                if not has_json:
+                    params["messages"].append({"role": "system", "content": "Please output in valid JSON format."})
+
         if request.temperature is not None:
             params["temperature"] = request.temperature
         if request.max_tokens is not None:

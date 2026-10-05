@@ -33,6 +33,30 @@ def test_single_workflow():
     graph_module.create_trial_data_analyst = lambda s, l: mock_agent
     graph_module.create_report_writer_agent = lambda s, l: mock_report
 
+    # Make the llm return is_supported for the second call (evidence validation)
+    # The first call is the Planner (which returns single workflow).
+    # Since ReportWriter is bypassed, the second LLM call is OutputGuardrailNode.
+    def mock_llm_complete(req):
+        import json
+        resp = MagicMock()
+        if req.response_schema and "is_supported" in req.response_schema.get("properties", {}):
+            resp.parsed = {"is_supported": True, "reason": "ok"}
+            resp.content = json.dumps(resp.parsed)
+        elif req.response_schema and "is_safe" in req.response_schema.get("properties", {}):
+            resp.parsed = {"is_safe": True, "reason": "ok"}
+            resp.content = json.dumps(resp.parsed)
+        else:
+            resp.parsed = {
+                "workflow_type": "single",
+                "selected_specialists": ["Trial Data Analyst"],
+                "task_descriptions": {"Trial Data Analyst": "Test"},
+                "resolved_entities": {}
+            }
+            resp.content = json.dumps(resp.parsed)
+        return resp
+        
+    llm.complete.side_effect = mock_llm_complete
+
     try:
         app = build_orchestration_graph(session, llm)
         final_state = app.invoke({"request_id": "1", "user_prompt": "test"})
@@ -41,7 +65,7 @@ def test_single_workflow():
         assert "Trial Data Analyst" in final_state["specialist_results"]
         # In single workflow, report writer now runs to synthesize output for guardrail validation
         assert final_state.get("final_report") is not None
-        assert final_state["final_report"]["report_text"] == "final"
+        assert final_state["final_report"]["report_content"] == "trial summary"
     finally:
         graph_module.create_trial_data_analyst = original_factory
         graph_module.create_report_writer_agent = orig_r

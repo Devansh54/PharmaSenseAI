@@ -31,35 +31,17 @@ def test_pipeline():
     print("Testing B: Single SQL Specialist...")
     
     responses = [
-        # 0. Input Guardrail
-        LLMResponse(content=json.dumps({
-            "is_safe": True,
-            "reason": "safe"
-        })),
-        # 1. Planner routing to Trial Data Analyst
-        LLMResponse(content=json.dumps({
-            "workflow_type": "single",
-            "selected_specialists": ["Trial Data Analyst"],
-            "task_descriptions": {"Trial Data Analyst": "find trial data"},
-            "resolved_entities": {}
-        })),
         # 2. Trial Data Analyst calling SQL tool
         LLMResponse(
             content=None,
-            tool_calls=[ToolCall(id="call_1", name="sql_query_tool", arguments={"query": "SELECT * FROM trials"})]
+            tool_calls=[ToolCall(id="call_1", name="sql_query_tool", arguments={"query_id": "trial_info", "parameters": {}})]
         ),
         # 3. Trial Data Analyst final answer
         LLMResponse(content=json.dumps({
             "summary": "Trial found.",
             "limitations": []
         })),
-        # 4. Report Writer
-        LLMResponse(content=json.dumps({
-            "report_text": "The trial was found.",
-            "limitations_noted": [],
-            "citations_resolved": []
-        })),
-        # 5. Output Guardrail (evidence validation)
+        # 4. Output Guardrail (evidence validation)
         LLMResponse(content=json.dumps({
             "is_supported": True,
             "reason": "supported"
@@ -73,4 +55,4 @@ def test_pipeline():
     final_state = graph.invoke({"request_id": "req_1", "user_prompt": "What is trial X?"})
     
     assert final_state.get("errors", []) == []
-    assert final_state.get("final_report", {}).get("report_text") == "The trial was found."
+    assert final_state.get("final_report", {}).get("report_content") == "Trial found."
