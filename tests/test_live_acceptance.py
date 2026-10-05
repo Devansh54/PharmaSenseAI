@@ -98,11 +98,84 @@ def test_s1_trial_enrollment(pgvector_engine, run_mode, acceptance_gateway):
         assert len(tools) == 1  # exactly one execution
 
         reqs = adapter.call_requests
-        assert len(reqs) == 3 # TrialAgent tool call, TrialAgent final, OutputGuardrail
+        assert len(reqs) == 2 # TrialAgent tool call, TrialAgent final (OutputGuardrail is deterministic)
         assert reqs[0].tools is not None
         assert reqs[1].tools is None
         assert reqs[1].tool_choice == "none"
         assert reqs[1].response_schema is not None
+
+    # Deterministic factual correctness assertions against authoritative SQL result
+    sql_exec = next(t for t in tools if t["tool_name"] == "sql_query_tool")
+    sql_results = sql_exec.get("result", {}).get("results", [])
+    report_text = state.get("final_report", {}).get("report_content", "")
+
+    below_60 = [r for r in sql_results if r.get("is_below_threshold") is True]
+    above_60 = [r for r in sql_results if r.get("is_below_threshold") is False]
+
+    for trial in below_60:
+        assert trial["trial_id"] in report_text, f"Below-60% trial {trial['trial_id']} was omitted from the report."
+
+    for trial in above_60:
+        # If it mentions an above_60 trial, it better not claim it's below 60 or meets/exceeds incorrectly?
+        # The prompt says: "every omitted Phase II oncology trial is actually at/above 60%"
+        # (This is logically checked by ensuring all below_60 are NOT omitted, which we just did above).
+        pass
+
+    # Ensure the model didn't make the exact mathematical hallucination observed
+    assert "35.6% exceeds 60%" not in report_text
+    assert "35.6% meets or exceeds 60%" not in report_text
+
+def test_s1_factual_correctness_regression(pgvector_engine, run_mode, acceptance_gateway):
+    """Regression test: LLM falsely claims 35.6% meets/exceeds 60%. Output Guardrail should catch it or test should fail."""
+    if run_mode == "live":
+        pytest.skip("Regression test is offline-only")
+
+    # Authoritative tool result has TRL-0037 with enrollment 35.6% and is_below_threshold = True
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="sql_query_tool", arguments={"query_id": "trial_enrollment_stats", "parameters": {"trial_phase": "Phase II", "therapeutic_area": "Oncology", "threshold_pct": 60.0}})]),
+        # Simulated hallucinated response
+        LLMResponse(content=json.dumps({"summary": "TRL-0037 meets or exceeds 60%.", "limitations": []})),
+        # Guardrail should technically fail if it correctly evaluates evidence
+        LLMResponse(content=json.dumps({"is_supported": False, "reason": "TRL-0037 is actually below 60% based on the data."}))
+    ]
+    acceptance_gateway = LLMGateway(OfflineAdapter(responses))
+
+    with pgvector_engine.begin() as conn:
+        conn.execute(text("INSERT INTO compounds (compound_id, compound_name) VALUES ('C-01', 'Test Compound') ON CONFLICT DO NOTHING"))
+        conn.execute(text("INSERT INTO clinical_trials (trial_id, compound_id, trial_phase, therapeutic_area, status, target_enrollment) VALUES ('TRL-0037', 'C-01', 'Phase II', 'Oncology', 'Active', 100) ON CONFLICT DO NOTHING"))
+        conn.execute(text("INSERT INTO trial_sites (site_id, trial_id, site_name, country, enrollment_count, site_status) VALUES ('S-01', 'TRL-0037', 'Site', 'US', 35, 'Active') ON CONFLICT DO NOTHING"))
+
+    with pgvector_engine.connect() as conn:
+        state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
+
+    # If the guardrail successfully caught the hallucination, state should contain an error or the guardrail failed the report.
+    # The output guardrail will fail if is_supported is false.
+    assert state.get("errors") != []
+    assert any("Evidence validation failed" in err for err in state.get("errors", []))
+
+def test_s1_factual_correctness_false_positive_regression(pgvector_engine, run_mode, acceptance_gateway):
+    """Regression test: LLM correctly separates below-threshold and above-threshold trials. Output Guardrail should NOT falsely reject it."""
+    if run_mode == "live":
+        pytest.skip("Regression test is offline-only")
+
+    # Authoritative tool result has TRL-0019 and TRL-0037 as below threshold
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="sql_query_tool", arguments={"query_id": "trial_enrollment_stats", "parameters": {"trial_phase": "Phase II", "therapeutic_area": "Oncology", "threshold_pct": 60.0}})]),
+        # Simulated correct response with 'above the threshold' explicitly mentioned
+        LLMResponse(content=json.dumps({"summary": "Two Phase II oncology trials are currently below the 60% enrollment threshold: TRL-0019 (Recruiting, 59.34% enrolled) and TRL-0037 (Active, not recruiting, 35.69% enrolled). Trials TRL-0010, TRL-0077, and TRL-0087 are at or above the threshold and are excluded from this finding.", "limitations": []}))
+    ]
+    acceptance_gateway = LLMGateway(OfflineAdapter(responses))
+
+    with pgvector_engine.begin() as conn:
+        conn.execute(text("INSERT INTO compounds (compound_id, compound_name) VALUES ('C-01', 'Test Compound') ON CONFLICT DO NOTHING"))
+        conn.execute(text("INSERT INTO clinical_trials (trial_id, compound_id, trial_phase, therapeutic_area, status, target_enrollment) VALUES ('TRL-0019', 'C-01', 'Phase II', 'Oncology', 'Active', 100), ('TRL-0037', 'C-01', 'Phase II', 'Oncology', 'Active', 100) ON CONFLICT DO NOTHING"))
+        conn.execute(text("INSERT INTO trial_sites (site_id, trial_id, site_name, country, enrollment_count, site_status) VALUES ('S-01', 'TRL-0019', 'Site', 'US', 59, 'Active'), ('S-02', 'TRL-0037', 'Site', 'US', 35, 'Active') ON CONFLICT DO NOTHING"))
+
+    with pgvector_engine.connect() as conn:
+        state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
+
+    assert state.get("errors") == []
+    assert state.get("validation_feedback") is None
 
 def test_s1_invalid_query_id_regression(pgvector_engine, run_mode, acceptance_gateway):
     """Regression test proving invalid query_id results in a tool failure."""

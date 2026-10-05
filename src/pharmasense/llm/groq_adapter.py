@@ -94,15 +94,8 @@ def _to_groq_tools(request: LLMRequest) -> Optional[List[Dict[str, Any]]]:
 def _to_groq_response_format(request: LLMRequest) -> Optional[Dict[str, Any]]:
     if not request.response_schema:
         return None
-    # Current Groq allows json_schema if a strict schema is known
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "structured_output",
-            "schema": request.response_schema,
-            "strict": True
-        }
-    }
+    # Current Groq allows json_object natively without strict json_schema issues
+    return {"type": "json_object"}
 
 
 def _parse_tool_calls(message: Any) -> List[ToolCall]:
@@ -167,10 +160,17 @@ class GroqAdapter(LLMProvider):
             if response_format:
                 params["response_format"] = response_format
 
-                # Ensure the prompt contains 'json' if json_object is used (or even json_schema to be safe)
-                has_json = any("json" in str(m.get("content", "")).lower() for m in params["messages"])
-                if not has_json:
-                    params["messages"].append({"role": "system", "content": "Please output in valid JSON format."})
+                print("DEBUG SCHEMA:", params.get("response_format"))
+                # Ensure the prompt contains 'json' and the actual schema if json_object is used
+                schema_str = json.dumps(request.response_schema) if request.response_schema else ""
+                params["messages"].append({
+                    "role": "system",
+                    "content": f"Please output strictly in valid JSON format adhering to this schema: {schema_str}"
+                })
+
+                print("DEBUG MESSAGES:")
+                for m in params["messages"]:
+                    print(m)
 
         if request.temperature is not None:
             params["temperature"] = request.temperature
@@ -184,6 +184,8 @@ class GroqAdapter(LLMProvider):
 
         choice = raw.choices[0]
         message = choice.message
+        # DEBUG
+        print("DEBUG GROQ CONTENT:", getattr(message, "content", None))
         return LLMResponse(
             content=getattr(message, "content", None),
             tool_calls=_parse_tool_calls(message),

@@ -41,8 +41,7 @@ def test_final_structured_request_has_json_schema_and_no_tools():
     kwargs = adapter._client.chat.completions.create.call_args.kwargs
     assert "tools" not in kwargs
     assert "response_format" in kwargs
-    assert kwargs["response_format"]["type"] == "json_schema"
-    assert kwargs["response_format"]["json_schema"]["schema"] == req.response_schema
+    assert kwargs["response_format"]["type"] == "json_object"
 
 def test_json_object_prompt_appended_if_missing():
     adapter = GroqAdapter(config=GroqAdapterConfig(api_key="fake"), client=MagicMock())

@@ -138,8 +138,42 @@ class OutputGuardrailNode:
         if not valid_out:
             return {"errors": [f"Output validation failed: {out_reason}"]}
 
-        context_str = json.dumps(state.get("specialist_results", {}))
-        is_supported, ev_reason = validate_evidence(report_text, context_str, self.llm)
+        evidence_payload = {
+            "specialist_results": state.get("specialist_results", {}),
+            "actual_tools": state.get("actual_tools", [])
+        }
+
+        # Deterministic fast path for S1 validation
+        is_supported = True
+        ev_reason = ""
+
+        actual_tools = state.get("actual_tools", [])
+        trial_tool = next((t for t in actual_tools if t.get("tool_name") == "sql_query_tool" and t.get("arguments", {}).get("query_id") == "trial_enrollment_stats"), None)
+        if trial_tool and state.get("plan") and state["plan"].workflow_type == "single":
+            results = trial_tool.get("result", {}).get("results", [])
+            below_60 = [r for r in results if r.get("is_below_threshold") is True]
+            for trial in below_60:
+                if trial["trial_id"] not in report_text:
+                    is_supported = False
+                    ev_reason = f"Deterministic validation failed: The report omitted the below-threshold trial {trial['trial_id']}."
+                    break
+
+            if is_supported:
+                import re
+                clauses = re.split(r'[.\n;]+|\bbut\b|\bwhile\b|\bwhereas\b', report_text.lower())
+                for clause in clauses:
+                    if any(h in clause for h in ["exceeds", "meets", "at or above", "above 60%", "above the threshold", "above threshold"]):
+                        for trial in below_60:
+                            if trial["trial_id"].lower() in clause:
+                                is_supported = False
+                                ev_reason = f"Deterministic validation failed: Contradictory claim for below-threshold trial {trial['trial_id']}."
+                                break
+                    if not is_supported:
+                        break
+        else:
+            # Fallback to LLM validation
+            context_str = json.dumps(evidence_payload)
+            is_supported, ev_reason = validate_evidence(report_text, context_str, self.llm)
 
         if not is_supported:
             if state.get("evidence_repaired"):

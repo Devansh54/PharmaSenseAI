@@ -13,7 +13,7 @@ You must use one of the exact `query_id`s below. Do NOT invent new IDs.
 - **`lab_results_summary`**: Lists experiment results for a specific compound, ordered by date. Parameters: `compound_id` (str).
 - **`compound_info`**: Retrieves compound properties (class, target, phase). Parameters: `compound_id` (str).
 - **`adverse_events_by_trial`**: Lists all adverse events for a trial. Parameters: `trial_id` (str).
-- **`trial_enrollment_stats`**: Retrieves trials with their current vs target enrollment. Parameters: `trial_phase` (str, optional, e.g. "Phase II"), `therapeutic_area` (str, optional, e.g. "Oncology"). Note: This query returns all matching trials and calculates `enrollment_pct`. If you need to filter trials that are below a certain percentage (e.g. below 60%), you MUST do that filtering yourself on the returned results, as the query does not accept a percentage filter parameter.
+- **`trial_enrollment_stats`**: Retrieves trials with their current vs target enrollment. Parameters: `trial_phase` (str, optional, e.g. "Phase II"), `therapeutic_area` (str, optional, e.g. "Oncology"), `threshold_pct` (float, optional, e.g. 60.0 for 60%). Note: The query returns an `is_below_threshold` boolean if `threshold_pct` is provided. You MUST rely on this boolean and NOT perform arithmetic comparisons yourself.
 
 ## Outputs
 You must return your findings using the predefined structured output schema for the Trial Data Analyst.

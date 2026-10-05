@@ -13,9 +13,10 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             task_descriptions={
                 "Trial Data Analyst": (
                     f"User Prompt: {prompt}\n\n"
-                    "INSTRUCTION: Use the `trial_enrollment_stats` query_id to retrieve all matching trials based on the requested phase and/or therapeutic area. "
-                    "The tool returns `enrollment_pct` for all matches. Do NOT try to use a percentage filter in the SQL query parameters. "
-                    "Instead, retrieve the trials and perform the percentage threshold filtering (e.g., below 60%) yourself in your analysis."
+                    "INSTRUCTION: Use the `trial_enrollment_stats` query_id to retrieve all matching trials. "
+                    "Pass the requested percentage threshold as `threshold_pct` (e.g. 60.0). "
+                    "The SQL tool will calculate and return an `is_below_threshold` boolean for each trial. "
+                    "You MUST rely exclusively on this boolean to filter the trials. Do NOT perform percentage threshold comparisons yourself."
                 )
             },
             resolved_entities={}

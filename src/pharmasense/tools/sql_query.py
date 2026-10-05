@@ -36,7 +36,11 @@ QUERY_CATALOG = {
         SELECT
             t.trial_id, t.trial_phase, t.therapeutic_area, t.status, t.target_enrollment,
             COALESCE(SUM(s.enrollment_count), 0) as current_enrollment,
-            CAST(COALESCE(SUM(s.enrollment_count), 0) AS FLOAT) / NULLIF(t.target_enrollment, 0) as enrollment_pct
+            CAST(COALESCE(SUM(s.enrollment_count), 0) AS FLOAT) / NULLIF(t.target_enrollment, 0) as enrollment_pct,
+            CASE
+                WHEN :threshold_pct IS NOT NULL THEN (CAST(COALESCE(SUM(s.enrollment_count), 0) AS FLOAT) / NULLIF(t.target_enrollment, 0)) < (:threshold_pct / 100.0)
+                ELSE NULL
+            END as is_below_threshold
         FROM clinical_trials t
         LEFT JOIN trial_sites s ON t.trial_id = s.trial_id
         WHERE (:trial_phase IS NULL OR t.trial_phase = :trial_phase)
@@ -52,9 +56,15 @@ def sql_query_tool(session: Session, input_data: SqlQueryInput) -> SqlQueryOutpu
 
     query = QUERY_CATALOG[input_data.query_id]
 
+    # Ensure all parameters used in the query are present in the dictionary (default to None)
+    import re
+    bind_params = re.findall(r":([a-zA-Z0-9_]+)", str(query))
+    safe_params = {p: None for p in bind_params}
+    safe_params.update(input_data.parameters)
+
     try:
         # Enforce row limit
-        result_proxy = session.execute(query, input_data.parameters)
+        result_proxy = session.execute(query, safe_params)
         keys = list(result_proxy.keys())
         rows = [dict(zip(keys, row)) for row in result_proxy.fetchmany(input_data.row_limit)]
         return SqlQueryOutput(results=rows, columns=keys)

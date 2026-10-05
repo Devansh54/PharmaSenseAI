@@ -190,7 +190,16 @@ class BaseAgent:
                     # 1. SINGLE-TOOL FINALIZATION CONTEXT PRUNING
                     # Discard the conversation history, keep only the system instructions + prompt + data
                     messages = [
-                        Message(role="system", content="You are in Synthesis Mode. Trust the provided tool results as authoritative. Answer the user's prompt based solely on the provided data. Do not invent facts."),
+                        Message(role="system", content=(
+                            "You are in Synthesis Mode. Trust the provided tool results as absolute ground truth.\n"
+                            "Answer the user's prompt based solely on the provided data.\n"
+                            "CRITICAL RULES:\n"
+                            "- Do NOT recalculate percentages.\n"
+                            "- Do NOT reinterpret threshold comparisons (rely exclusively on boolean flags like `is_below_threshold`).\n"
+                            "- Do NOT invent, round, or alter values.\n"
+                            "- Do NOT classify a row as above/below threshold differently from the SQL result.\n"
+                            "Your only job is to format the given facts."
+                        )),
                         Message(role="user", content=f"Original Prompt: {prompt}")
                     ]
 
@@ -210,7 +219,7 @@ class BaseAgent:
                                 "Produce the final user-facing answer from the supplied result.\n"
                                 "Do not call tools.\n"
                                 "Do not invent or recalculate database facts.\n"
-                                "Include the matching trials, enrollment values, count, and provenance."
+                                f"Strictly output valid JSON matching this schema: {json.dumps(self.output_model.model_json_schema())}"
                             )
                         )
                     )
