@@ -19,7 +19,7 @@ def citation_formatter_tool(session: Session, input_data: CitationInput) -> Cita
     """Format evidence into valid citations."""
     citations = []
     invalid = []
-    
+
     for chunk_id in input_data.evidence_chunk_ids:
         try:
             ref = resolve_reference(session, chunk_id)
@@ -32,7 +32,7 @@ def citation_formatter_tool(session: Session, input_data: CitationInput) -> Cita
             })
         except ReferenceNotFoundError:
             invalid.append(chunk_id)
-            
+
     return CitationOutput(
         claim=input_data.claim,
         citations=citations,

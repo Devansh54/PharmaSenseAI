@@ -19,7 +19,7 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
     """Calculate attribute-based similarity (not molecular structure)."""
     attrs_1 = input_data.compound_1_attrs
     attrs_2 = input_data.compound_2_attrs
-    
+
     all_keys = set(attrs_1.keys()).union(set(attrs_2.keys()))
     if not all_keys:
         return CompoundSimilarityOutput(
@@ -29,19 +29,19 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
             limitations=["No attributes provided for comparison."],
             profile_version="v1"
         )
-        
+
     contributions = {}
     valid_features = 0
-    
+
     for key in all_keys:
         val1 = attrs_1.get(key)
         val2 = attrs_2.get(key)
-        
+
         if val1 is None or val2 is None:
             continue
-            
+
         valid_features += 1
-        
+
         # Categorical Match
         if isinstance(val1, str) and isinstance(val2, str):
             contributions[key] = 1.0 if val1.lower() == val2.lower() else 0.0
@@ -54,10 +54,10 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
                 contributions[key] = 1.0 - (abs(val1 - val2) / max_val)
         else:
             contributions[key] = 0.0 # Unsupported type
-            
+
     coverage = valid_features / len(all_keys)
     overall = sum(contributions.values()) / valid_features if valid_features > 0 else 0.0
-    
+
     return CompoundSimilarityOutput(
         overall_score=round(overall, 3),
         coverage=round(coverage, 3),

@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Type, Optional
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from pharmasense.utils.formatters import compact_tool_result
 
 from pharmasense.llm.contracts import (
     LLMProvider,
@@ -45,21 +46,34 @@ class BaseAgent:
             input_model = sig.parameters["input_data"].annotation
             schema = input_model.model_json_schema()
 
-            parameters = {
-                "type": "object",
-                "properties": schema.get("properties", {}),
-            }
-            if "required" in schema:
-                parameters["required"] = schema["required"]
+            # 5. TOOL-SCHEMA MINIFICATION
+            def minify_schema(s: dict) -> dict:
+                minified = {}
+                for k, v in s.items():
+                    # Preserve types, enums, items, and properties
+                    if k in ("type", "enum", "items", "properties", "required", "$defs"):
+                        if isinstance(v, dict) and k in ("properties", "$defs"):
+                            minified[k] = {pk: minify_schema(pv) for pk, pv in v.items()}
+                        elif isinstance(v, dict) and k == "items":
+                            minified[k] = minify_schema(v)
+                        else:
+                            minified[k] = v
+                    elif k == "description":
+                        # Keep description but trim it if it's too verbose
+                        # or just keep it entirely to be safe, but the instruction says "remove redundant descriptions"
+                        # We will remove property-level descriptions to save tokens, they are usually self-evident from the name
+                        pass
+                return minified
 
-            # Pydantic may put defs in $defs; we must copy them so OpenAI doesn't choke on missing references
-            if "$defs" in schema:
-                parameters["$defs"] = schema["$defs"]
+            parameters = minify_schema(schema)
+
+            # Ensure type is object at root
+            parameters["type"] = "object"
 
             specs.append(
                 ToolSpec(
                     name=name,
-                    description=func.__doc__ or f"Tool {name}",
+                    description=func.__doc__.split('\n')[0] if func.__doc__ else f"Tool {name}",
                     parameters=parameters,
                 )
             )
@@ -140,6 +154,8 @@ class BaseAgent:
                         result_str = json.dumps(result_obj)
                         result_raw = result_obj
 
+                    compacted_str = compact_tool_result(result_raw)
+
                     self.executed_tools.append({
                         "tool_name": call.name,
                         "arguments": call.arguments,
@@ -147,17 +163,19 @@ class BaseAgent:
                     })
                 except Exception as e:
                     # Return error back to LLM so it can retry
-                    result_str = json.dumps({"error": str(e)})
+                    result_raw = {"error": str(e)}
                     self.executed_tools.append({
                         "tool_name": call.name,
                         "arguments": call.arguments,
-                        "result": {"error": str(e)}
+                        "result": result_raw
                     })
+
+                compacted_str = compact_tool_result(result_raw)
 
                 messages.append(
                     Message(
                         role="tool",
-                        content=result_str,
+                        content=compacted_str,
                         tool_call_id=call.id,
                         name=call.name,
                     )
@@ -168,14 +186,30 @@ class BaseAgent:
                 any_success = any(not t.get("result", {}).get("error") for t in self.executed_tools)
                 if any_success:
                     active_tools = None
+
+                    # 1. SINGLE-TOOL FINALIZATION CONTEXT PRUNING
+                    # Discard the conversation history, keep only the system instructions + prompt + data
+                    messages = [
+                        Message(role="system", content="You are in Synthesis Mode. Trust the provided tool results as authoritative. Answer the user's prompt based solely on the provided data. Do not invent facts."),
+                        Message(role="user", content=f"Original Prompt: {prompt}")
+                    ]
+
+                    for t in self.executed_tools:
+                        compacted_res = compact_tool_result(t.get("result", {}))
+                        messages.append(
+                            Message(
+                                role="user",
+                                content=f"Tool '{t['tool_name']}' returned:\n{compacted_res}"
+                            )
+                        )
+
                     messages.append(
                         Message(
                             role="user",
                             content=(
-                                "The SQL tool has already returned the authoritative result.\n"
+                                "Produce the final user-facing answer from the supplied result.\n"
                                 "Do not call tools.\n"
                                 "Do not invent or recalculate database facts.\n"
-                                "Produce the final user-facing answer from the supplied result.\n"
                                 "Include the matching trials, enrollment values, count, and provenance."
                             )
                         )

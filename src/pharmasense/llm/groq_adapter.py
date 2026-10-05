@@ -166,7 +166,7 @@ class GroqAdapter(LLMProvider):
             response_format = _to_groq_response_format(request)
             if response_format:
                 params["response_format"] = response_format
-                
+
                 # Ensure the prompt contains 'json' if json_object is used (or even json_schema to be safe)
                 has_json = any("json" in str(m.get("content", "")).lower() for m in params["messages"])
                 if not has_json:

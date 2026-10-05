@@ -13,12 +13,16 @@ class AETriageOutput(BaseModel):
     final_seriousness: Optional[str] = Field(..., description="The final seriousness, strictly matching the tool output. Null if unknown.")
     requires_review: bool = Field(..., description="Whether this event requires human review.")
 
-def create_ae_triage_agent(session: Session, llm: LLMProvider) -> BaseAgent:
+def create_ae_triage_agent(session: Session, llm: LLMProvider, task_desc: str = "") -> BaseAgent:
     instruction_path = Path("agent_specs/ae_triage/instructions.md")
+    full_instruction = instruction_path.read_text(encoding="utf-8")
+    if "## Examples" in full_instruction:
+        full_instruction = full_instruction.split("## Examples")[0].strip()
+
     return BaseAgent(
         session=session,
         llm=llm,
-        system_instruction=instruction_path.read_text(encoding="utf-8"),
+        system_instruction=full_instruction,
         tools={
             "sql_query_tool": sql_query_tool,
             "ae_severity_classifier_tool": ae_severity_classifier_tool

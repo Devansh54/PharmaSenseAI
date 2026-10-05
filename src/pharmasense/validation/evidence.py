@@ -4,7 +4,7 @@ from pharmasense.config import DEFAULT_MODEL
 
 def check_citations_exist(report: str) -> bool:
     """
-    Deterministic check: ensures that if citations like [1] exist, 
+    Deterministic check: ensures that if citations like [1] exist,
     they are correctly formatted. In a fuller implementation, this would
     check against the specific returned context chunks. For now, it ensures
     at least no naked empty brackets or invalid citation forms.
@@ -22,9 +22,9 @@ def validate_evidence(report: str, context_summary: str, llm: LLMProvider) -> tu
     """
     if not check_citations_exist(report):
         return False, "Formatting error: Invalid citations found."
-        
+
     prompt = f"""
-You are an evidence validation judge. 
+You are an evidence validation judge.
 Your task is to determine if the claims made in the REPORT are fully supported by the CONTEXT.
 If the report makes claims that are NOT in the context, or hallucinates facts, fail it.
 
@@ -34,7 +34,7 @@ CONTEXT:
 REPORT:
 {report}
 
-Respond strictly with a JSON object: 
+Respond strictly with a JSON object:
 {{"is_supported": true/false, "reason": "explanation of what is unsupported if false"}}
 """
     schema = {
@@ -46,14 +46,14 @@ Respond strictly with a JSON object:
         "required": ["is_supported", "reason"],
         "additionalProperties": False
     }
-    
+
     req = LLMRequest(
         model=DEFAULT_MODEL,
         messages=[Message(role="user", content=prompt)],
         response_schema=schema,
         temperature=0.0
     )
-    
+
     try:
         resp = llm.complete(req)
         import json

@@ -33,8 +33,8 @@ QUERY_CATALOG = {
     "compound_info": text("SELECT compound_name, chemical_class, target_protein, discovery_phase FROM compounds WHERE compound_id = :compound_id"),
     "adverse_events_by_trial": text("SELECT event_date, adverse_event_term, severity, seriousness, outcome FROM adverse_events WHERE trial_id = :trial_id"),
     "trial_enrollment_stats": text("""
-        SELECT 
-            t.trial_id, t.trial_phase, t.therapeutic_area, t.status, t.target_enrollment, 
+        SELECT
+            t.trial_id, t.trial_phase, t.therapeutic_area, t.status, t.target_enrollment,
             COALESCE(SUM(s.enrollment_count), 0) as current_enrollment,
             CAST(COALESCE(SUM(s.enrollment_count), 0) AS FLOAT) / NULLIF(t.target_enrollment, 0) as enrollment_pct
         FROM clinical_trials t
@@ -49,9 +49,9 @@ def sql_query_tool(session: Session, input_data: SqlQueryInput) -> SqlQueryOutpu
     """Execute a parameterized read-only SQL query from the approved catalog."""
     if input_data.query_id not in QUERY_CATALOG:
         return SqlQueryOutput(results=[], columns=[], error=f"Unknown query_id: {input_data.query_id}")
-    
+
     query = QUERY_CATALOG[input_data.query_id]
-    
+
     try:
         # Enforce row limit
         result_proxy = session.execute(query, input_data.parameters)

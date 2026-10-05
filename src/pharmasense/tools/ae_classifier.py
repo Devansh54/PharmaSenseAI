@@ -20,23 +20,23 @@ def ae_severity_classifier_tool(input_data: AEClassifierInput) -> AEClassifierOu
     missing = False
     if not input_data.severity or not input_data.seriousness:
         missing = True
-        
+
     rules_matched = []
     require_review = False
-    
+
     # Rule 1: Unknown seriousness remains unknown, does not default to Non-serious.
     final_seriousness = input_data.seriousness
-    
+
     # Rule 2: Explicitly "Serious" events trigger review
     if final_seriousness and final_seriousness.strip().lower() == "serious":
         rules_matched.append("RULE_01_SERIOUS_REQUIRES_REVIEW")
         require_review = True
-        
+
     # Rule 3: Fatal or Life-threatening severity strongly implies Serious
     if input_data.severity and input_data.severity.strip().lower() in ["fatal", "life-threatening"]:
         rules_matched.append("RULE_02_HIGH_SEVERITY_FLAGGED")
         require_review = True
-        
+
     return AEClassifierOutput(
         severity=input_data.severity,
         seriousness=final_seriousness,

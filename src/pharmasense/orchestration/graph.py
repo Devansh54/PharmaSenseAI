@@ -39,7 +39,12 @@ class SpecialistRunner:
         task_desc = plan.task_descriptions.get(self.name, state.get("user_prompt", ""))
 
         # Instantiate agent lazily to ensure session is bound
-        agent = self.agent_factory(self.session, self.llm)
+        import inspect
+        sig = inspect.signature(self.agent_factory)
+        if "task_desc" in sig.parameters:
+            agent = self.agent_factory(self.session, self.llm, task_desc=task_desc)
+        else:
+            agent = self.agent_factory(self.session, self.llm)
 
         single_tool_mode = plan.workflow_type == "single"
 
@@ -80,7 +85,15 @@ class ReportWriterRunner:
 
         findings_str = ""
         for name, res in specialist_results.items():
-            findings_str += f"--- {name} Findings ---\n{res}\n\n"
+            findings_str += f"--- {name} Findings ---\n"
+            if isinstance(res, dict):
+                for k, v in res.items():
+                    if v == [] or v == "" or v is None:
+                        continue
+                    findings_str += f"{k.capitalize()}: {v}\n"
+            else:
+                findings_str += f"{res}\n"
+            findings_str += "\n"
 
         task_desc = f"Synthesize the following findings into a final report:\n\n{findings_str}"
 
