@@ -65,21 +65,22 @@ class BaseAgent:
             )
         return specs
 
-    def run(self, prompt: str) -> tuple[BaseModel, List[dict]]:
+    def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, List[dict]]:
         messages = [
             Message(role="system", content=self.system_instruction),
             Message(role="user", content=prompt),
         ]
 
         self.executed_tools = []
+        active_tools = self._tool_specs if self._tool_specs else None
 
         for _ in range(self.max_iterations):
             # 1. Prepare Request
             req = LLMRequest(
                 messages=messages,
                 model=self.model_name,
-                tools=self._tool_specs if self._tool_specs else None,
-                tool_choice="auto" if self._tool_specs else "none",
+                tools=active_tools,
+                tool_choice="auto" if active_tools else "none",
                 response_schema=self.output_model.model_json_schema()
             )
 
@@ -161,5 +162,23 @@ class BaseAgent:
                         name=call.name,
                     )
                 )
+
+            # Check if we should force finalization
+            if single_tool_mode and self.executed_tools:
+                any_success = any(not t.get("result", {}).get("error") for t in self.executed_tools)
+                if any_success:
+                    active_tools = None
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "The SQL tool has already returned the authoritative result.\n"
+                                "Do not call tools.\n"
+                                "Do not invent or recalculate database facts.\n"
+                                "Produce the final user-facing answer from the supplied result.\n"
+                                "Include the matching trials, enrollment values, count, and provenance."
+                            )
+                        )
+                    )
 
         raise RuntimeError(f"Agent exceeded max iterations ({self.max_iterations})")

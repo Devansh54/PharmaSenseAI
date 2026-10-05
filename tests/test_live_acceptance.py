@@ -12,9 +12,11 @@ class OfflineAdapter(LLMProvider):
     def __init__(self, responses=None):
         self.responses = responses or []
         self.call_count = 0
+        self.call_requests = []
         self._config = GatewayConfig(model="mock-model")
 
     def complete(self, request: LLMRequest) -> LLMResponse:
+        self.call_requests.append(request)
         # Simple heuristic to match schema to response
         schema_str = json.dumps(request.response_schema) if request.response_schema else ""
         prompt_str = str(request.messages)
@@ -82,7 +84,8 @@ def test_s1_trial_enrollment(pgvector_engine, run_mode, acceptance_gateway):
             LLMResponse(content=json.dumps({"summary": "Trials found below 60%.", "limitations": []})),
             LLMResponse(content=json.dumps({"is_supported": True, "reason": "Yes"}))
         ]
-        acceptance_gateway = LLMGateway(OfflineAdapter(responses))
+        adapter = OfflineAdapter(responses)
+        acceptance_gateway = LLMGateway(adapter)
 
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
@@ -92,6 +95,14 @@ def test_s1_trial_enrollment(pgvector_engine, run_mode, acceptance_gateway):
     tools = state.get("actual_tools", [])
     if run_mode == "offline":
         assert any(t["tool_name"] == "sql_query_tool" for t in tools)
+        assert len(tools) == 1  # exactly one execution
+
+        reqs = adapter.call_requests
+        assert len(reqs) == 3 # TrialAgent tool call, TrialAgent final, OutputGuardrail
+        assert reqs[0].tools is not None
+        assert reqs[1].tools is None
+        assert reqs[1].tool_choice == "none"
+        assert reqs[1].response_schema is not None
 
 def test_s1_invalid_query_id_regression(pgvector_engine, run_mode, acceptance_gateway):
     """Regression test proving invalid query_id results in a tool failure."""

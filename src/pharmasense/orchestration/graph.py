@@ -41,8 +41,10 @@ class SpecialistRunner:
         # Instantiate agent lazily to ensure session is bound
         agent = self.agent_factory(self.session, self.llm)
 
+        single_tool_mode = plan.workflow_type == "single"
+
         try:
-            result, executed_tools = agent.run(task_desc)
+            result, executed_tools = agent.run(task_desc, single_tool_mode=single_tool_mode)
             return {
                 "specialist_results": {self.name: result.model_dump()},
                 "actual_tools": executed_tools
