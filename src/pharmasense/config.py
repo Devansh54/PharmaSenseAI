@@ -41,7 +41,10 @@ DATABASE_URL = os.environ.get(
 
 # --- LLM Gateway ---
 LLM_PROVIDER_NAME = os.environ.get("LLM_PROVIDER", "openai")
-DEFAULT_MODEL = os.environ.get("LLM_MODEL", os.environ.get("PHARMASENSE_LLM_MODEL", "gpt-4o-mini"))
+
+def get_default_model() -> str:
+    return os.environ.get("LLM_MODEL", os.environ.get("PHARMASENSE_LLM_MODEL", "gpt-4o-mini"))
+
 DEFAULT_TIMEOUT_SECONDS = float(os.environ.get("PHARMASENSE_LLM_TIMEOUT_SECONDS", "30"))
 DEFAULT_MAX_RETRIES = int(os.environ.get("PHARMASENSE_LLM_MAX_RETRIES", "2"))
 
@@ -55,7 +58,7 @@ GROQ_API_KEY_ENV = "GROQ_API_KEY"
 @dataclass(frozen=True)
 class GatewayConfig:
     """Runtime configuration for `LLMGateway`."""
-    model: str = DEFAULT_MODEL
+    model: str = field(default_factory=get_default_model)
     request_timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     retry_policy: RetryPolicy = field(
         default_factory=lambda: RetryPolicy(max_retries=DEFAULT_MAX_RETRIES)
@@ -66,7 +69,7 @@ class GatewayConfig:
 @dataclass(frozen=True)
 class OpenAIAdapterConfig:
     """Configuration specific to the OpenAI SDK adapter."""
-    model: str = DEFAULT_MODEL
+    model: str = field(default_factory=get_default_model)
     api_key: Optional[str] = field(default_factory=lambda: os.environ.get(OPENAI_API_KEY_ENV))
     base_url: Optional[str] = field(default_factory=lambda: os.environ.get(OPENAI_BASE_URL_ENV))
     organization: Optional[str] = field(default_factory=lambda: os.environ.get(OPENAI_ORG_ENV))
@@ -78,7 +81,7 @@ class OpenAIAdapterConfig:
 @dataclass(frozen=True)
 class GeminiAdapterConfig:
     """Configuration specific to the Gemini SDK adapter."""
-    model: str = DEFAULT_MODEL
+    model: str = field(default_factory=get_default_model)
     api_key: Optional[str] = field(default_factory=lambda: os.environ.get(GEMINI_API_KEY_ENV))
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
 
@@ -88,7 +91,7 @@ class GeminiAdapterConfig:
 @dataclass(frozen=True)
 class GroqAdapterConfig:
     """Configuration specific to the Groq SDK adapter."""
-    model: str = DEFAULT_MODEL
+    model: str = field(default_factory=get_default_model)
     api_key: Optional[str] = field(default_factory=lambda: os.environ.get(GROQ_API_KEY_ENV))
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
 

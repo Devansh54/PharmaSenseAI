@@ -1,6 +1,6 @@
 import re
 from pharmasense.llm.contracts import LLMProvider, LLMRequest, Message
-from pharmasense.config import DEFAULT_MODEL
+from pharmasense.config import get_default_model
 
 def check_citations_exist(report: str) -> bool:
     """
@@ -48,7 +48,7 @@ Respond strictly with a JSON object:
     }
 
     req = LLMRequest(
-        model=DEFAULT_MODEL,
+        model=get_default_model(),
         messages=[Message(role="user", content=prompt)],
         response_schema=schema,
         temperature=0.0
