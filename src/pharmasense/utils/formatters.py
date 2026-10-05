@@ -39,9 +39,9 @@ def compact_tool_result(result_raw: Any) -> str:
             lines = []
             for chunk in chunks:
                 chunk_id = chunk.get("chunk_id", "Unknown")
-                doc_title = chunk.get("document_title", "Unknown")
-                text = chunk.get("text", "")
-                score = chunk.get("score", 0.0)
+                doc_title = chunk.get("title", "Unknown")
+                text = chunk.get("chunk_text", "")
+                score = chunk.get("similarity_score", 0.0)
                 lines.append(f"--- Chunk ID: {chunk_id} | Doc: {doc_title} | Score: {score:.3f} ---\n{text}\n")
             return "\n".join(lines)
 

@@ -3,6 +3,7 @@ import json
 import pytest
 from unittest.mock import MagicMock
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 from pharmasense.llm.contracts import LLMProvider, LLMRequest, LLMResponse, ToolCall
 from pharmasense.llm.gateway import LLMGateway
 from pharmasense.orchestration.graph import build_orchestration_graph
@@ -210,8 +211,8 @@ def test_s2_literature_rag(pgvector_engine, run_mode, acceptance_gateway):
         ]
         acceptance_gateway = LLMGateway(OfflineAdapter(responses))
 
-    with pgvector_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "What has our internal research said about JAK2 inhibitors and cardiotoxicity?")
+    with Session(pgvector_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "What has our internal research said about JAK2 inhibitors and cardiotoxicity?")
 
     assert state.get("errors", []) == []
     assert "Literature Research" in state.get("specialist_results", {})
