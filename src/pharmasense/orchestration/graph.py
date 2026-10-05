@@ -59,8 +59,20 @@ class ReportWriterRunner:
         self.llm = llm
 
     def __call__(self, state: WorkflowState) -> dict:
+        plan = state.get("plan")
+        specialist_results = state.get("specialist_results", {})
+
+        # Fast-path pass-through for single workflows
+        if plan and plan.workflow_type == "single":
+            if specialist_results:
+                first_result = next(iter(specialist_results.values()))
+                # Extract the main answer or serialize
+                content = first_result.get("answer") or first_result.get("summary") or str(first_result)
+                return {"final_report": {"report_content": content}}
+            return {"final_report": {"report_content": "No results."}}
+
         findings_str = ""
-        for name, res in state.get("specialist_results", {}).items():
+        for name, res in specialist_results.items():
             findings_str += f"--- {name} Findings ---\n{res}\n\n"
 
         task_desc = f"Synthesize the following findings into a final report:\n\n{findings_str}"

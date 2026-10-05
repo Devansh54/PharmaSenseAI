@@ -23,6 +23,17 @@ QUERY_CATALOG = {
     "lab_results_summary": text("SELECT experiment_type, result_value, unit, pass_fail FROM lab_results WHERE compound_id = :compound_id ORDER BY result_date DESC"),
     "compound_info": text("SELECT compound_name, chemical_class, target_protein, discovery_phase FROM compounds WHERE compound_id = :compound_id"),
     "adverse_events_by_trial": text("SELECT event_date, adverse_event_term, severity, seriousness, outcome FROM adverse_events WHERE trial_id = :trial_id"),
+    "trial_enrollment_stats": text("""
+        SELECT 
+            t.trial_id, t.trial_phase, t.therapeutic_area, t.status, t.target_enrollment, 
+            COALESCE(SUM(s.enrollment_count), 0) as current_enrollment,
+            CAST(COALESCE(SUM(s.enrollment_count), 0) AS FLOAT) / NULLIF(t.target_enrollment, 0) as enrollment_pct
+        FROM clinical_trials t
+        LEFT JOIN trial_sites s ON t.trial_id = s.trial_id
+        WHERE (:trial_phase IS NULL OR t.trial_phase = :trial_phase)
+          AND (:therapeutic_area IS NULL OR t.therapeutic_area = :therapeutic_area)
+        GROUP BY t.trial_id, t.trial_phase, t.therapeutic_area, t.status, t.target_enrollment
+    """),
 }
 
 def sql_query_tool(session: Session, input_data: SqlQueryInput) -> SqlQueryOutput:

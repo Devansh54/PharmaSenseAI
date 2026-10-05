@@ -23,7 +23,7 @@ class BaseAgent:
         system_instruction: str,
         tools: Dict[str, Callable],
         output_model: Type[BaseModel],
-        max_iterations: int = 5,
+        max_iterations: int = 2,
         model_name: Optional[str] = None
     ):
         self.session = session

@@ -21,40 +21,19 @@ def detect_injection(text: str) -> bool:
     return False
 
 def detect_medical_advice(query: str, llm: LLMProvider) -> bool:
-    """Uses a lightweight LLM call to semantically detect requests for direct medical advice."""
-    prompt = f"""
-You are a medical safety classifier. Your job is to determine if the user is asking for personalized medical advice, prescription recommendations, or a diagnosis.
-
-General pharmaceutical research questions (e.g. "What are the adverse effects of drug X?", "How does compound Y work?") are NOT medical advice and should be allowed.
-Questions like "Should I take drug X?", "What should I do for my headache?", or "Is this safe for my condition?" are medical advice and should be blocked.
-
-User Query:
-{query}
-
-Respond strictly with a JSON object: {{"is_medical_advice": true}} or {{"is_medical_advice": false}}.
-"""
-    schema = {
-        "type": "object",
-        "properties": {
-            "is_medical_advice": {"type": "boolean"}
-        },
-        "required": ["is_medical_advice"]
-    }
-    
-    req = LLMRequest(
-        model=None,
-        messages=[Message(role="user", content=prompt)],
-        response_schema=schema,
-        temperature=0.0
-    )
-    
-    try:
-        resp = llm.complete(req)
-        import json
-        data = json.loads(resp.content)
-        return data.get("is_medical_advice", False)
-    except Exception:
-        # In case of LLM failure, fail safe or fail open?
-        # A safety classifier should default to False if we don't want to break the app,
-        # but let's assume False to allow normal queries if the safety check crashes.
+    """Uses deterministic regex matching to detect requests for direct medical advice."""
+    if not query:
         return False
+        
+    medical_patterns = [
+        re.compile(r'\b(should i take|can i take|my dosage|prescribe me|diagnose me)\b', re.IGNORECASE),
+        re.compile(r'\b(what should i do for my|is this safe for my|how do i treat my)\b', re.IGNORECASE),
+        re.compile(r'\b(what medication should a patient take|what medication should i take)\b', re.IGNORECASE),
+        re.compile(r'\b(what should a patient take for|what should i take for)\b', re.IGNORECASE)
+    ]
+    
+    for pattern in medical_patterns:
+        if pattern.search(query):
+            return True
+            
+    return False
