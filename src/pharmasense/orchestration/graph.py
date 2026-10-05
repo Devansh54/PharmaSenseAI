@@ -67,7 +67,12 @@ class ReportWriterRunner:
             if specialist_results:
                 first_result = next(iter(specialist_results.values()))
                 # Extract the main answer or serialize
-                content = first_result.get("answer") or first_result.get("summary") or str(first_result)
+                content = (
+                    first_result.get("summary") or
+                    first_result.get("findings") or
+                    first_result.get("explanation") or
+                    str(first_result)
+                )
                 return {"final_report": {"report_content": content}}
             return {"final_report": {"report_content": "No results."}}
 
@@ -166,6 +171,8 @@ def route_after_input_guardrail(state: WorkflowState):
     return "planner"
 
 def route_after_output_guardrail(state: WorkflowState):
+    if state.get("errors"):
+        return "finalizer"
     if state.get("validation_feedback"):
         return "report_writer"
     return "finalizer"

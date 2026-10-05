@@ -6,7 +6,7 @@ def try_deterministic_route(prompt: str) -> Plan | None:
     prompt_lower = prompt.lower()
     
     # Multi-agent "full picture"
-    if "full picture" in prompt_lower or ("labs" in prompt_lower and "trials" in prompt_lower and "safety" in prompt_lower and "literature" in prompt_lower):
+    if any(p in prompt_lower for p in ["full picture", "overall profile", "compound investigation"]):
         return Plan(
             workflow_type="parallel",
             selected_specialists=[
@@ -25,22 +25,37 @@ def try_deterministic_route(prompt: str) -> Plan | None:
         )
 
     # Determine single-domain matches
-    matches = []
-    if re.search(r'\b(trial|enrollment|clinical trial|phase ii)\b', prompt_lower):
-        matches.append("Trial Data Analyst")
-    if re.search(r'\b(research|document|literature|internal research|jak2)\b', prompt_lower):
-        matches.append("Literature Research")
-    if re.search(r'\b(adverse event|ae|safety|seriousness|triage|serious adverse event)\b', prompt_lower):
-        matches.append("Adverse Event Triage")
-    if re.search(r'\b(similar|similarity|related compounds)\b', prompt_lower):
-        matches.append("Compound Similarity")
+    matches = set()
+    
+    # Safety is prioritized if explicit triage/AE terms exist
+    if re.search(r'\b(adverse event|ae|safety|seriousness|serious event|toxicity|triage)\b', prompt_lower):
+        matches.add("Adverse Event Triage")
+    
+    # Trial matches
+    if re.search(r'\b(trials?|studies|study|enrollment|enrolment|recruitment|sites?|clinical studies|clinical trials?)\b', prompt_lower):
+        matches.add("Trial Data Analyst")
+        
+    # Literature matches
+    if re.search(r'\b(research|literature|document|papers|evidence|findings|internal research)\b', prompt_lower):
+        matches.add("Literature Research")
+        
+    # Similarity matches
+    if re.search(r'\b(similar|similarity|related compounds?)\b', prompt_lower):
+        matches.add("Compound Similarity")
+
+    # If it matches Adverse Event AND Trial (e.g. "adverse event for Trial TRL-0032"), 
+    # it's usually an AE triage task primarily. Let's refine conflicts:
+    if "Adverse Event Triage" in matches and "Trial Data Analyst" in matches:
+        if "triage" in prompt_lower or "adverse event" in prompt_lower:
+            matches.remove("Trial Data Analyst")
 
     # Fast path only for unambiguous single matches
     if len(matches) == 1:
+        selected = list(matches)[0]
         return Plan(
             workflow_type="single",
-            selected_specialists=[matches[0]],
-            task_descriptions={matches[0]: prompt},
+            selected_specialists=[selected],
+            task_descriptions={selected: prompt},
             resolved_entities={}
         )
     
