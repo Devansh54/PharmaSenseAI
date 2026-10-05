@@ -14,8 +14,11 @@ from pharmasense.config import CSV_FILES, DATABASE_URL
 from pharmasense.contracts import LOAD_ORDER
 
 _PHASE3_DATABASE_URL = os.environ.get(
-    "PHARMASENSE_TEST_DATABASE_URL",
-    "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_test"
+    "EVAL_DATABASE_URL",
+    os.environ.get(
+        "PHARMASENSE_TEST_DATABASE_URL",
+        "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_test"
+    )
 )
 
 def _ensure_test_db():
@@ -49,9 +52,9 @@ def pgvector_engine():
     """A Postgres engine with pgvector enabled and all tables created."""
     from pharmasense.db.source_schema import Base
     import pharmasense.db.models  # noqa: F401
-    
+
     _ensure_test_db()
-    
+
     engine = create_engine(_PHASE3_DATABASE_URL)
     try:
         with engine.connect() as conn:
@@ -62,5 +65,6 @@ def pgvector_engine():
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)
+
     yield engine
     Base.metadata.drop_all(engine)

@@ -6,8 +6,12 @@ from pharmasense.db.source_schema import ClinicalTrial, Compound
 
 def test_sql_query_unknown_query(pgvector_engine):
     with Session(pgvector_engine) as session:
-        result = sql_query_tool(session, SqlQueryInput(query_id="invalid", parameters={}))
-        assert result.error == "Unknown query_id: invalid"
+        from pydantic import ValidationError
+        try:
+            sql_query_tool(session, SqlQueryInput(query_id="invalid", parameters={}))
+            assert False, "Should have raised ValidationError"
+        except ValidationError:
+            pass
 
 def test_sql_query_trial_summary(pgvector_engine):
     with Session(pgvector_engine) as session:

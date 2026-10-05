@@ -4,15 +4,31 @@ from pharmasense.orchestration.state import Plan, WorkflowState
 
 def try_deterministic_route(prompt: str) -> Plan | None:
     prompt_lower = prompt.lower()
-    
+
+    # Specific map for high-confidence trial enrollment workflows (e.g., S1)
+    if "enrollment" in prompt_lower and "below" in prompt_lower and "trials" in prompt_lower:
+        return Plan(
+            workflow_type="single",
+            selected_specialists=["Trial Data Analyst"],
+            task_descriptions={
+                "Trial Data Analyst": (
+                    f"User Prompt: {prompt}\n\n"
+                    "INSTRUCTION: Use the `trial_enrollment_stats` query_id to retrieve all matching trials based on the requested phase and/or therapeutic area. "
+                    "The tool returns `enrollment_pct` for all matches. Do NOT try to use a percentage filter in the SQL query parameters. "
+                    "Instead, retrieve the trials and perform the percentage threshold filtering (e.g., below 60%) yourself in your analysis."
+                )
+            },
+            resolved_entities={}
+        )
+
     # Multi-agent "full picture"
     if any(p in prompt_lower for p in ["full picture", "overall profile", "compound investigation"]):
         return Plan(
             workflow_type="parallel",
             selected_specialists=[
-                "Trial Data Analyst", 
-                "Literature Research", 
-                "Adverse Event Triage", 
+                "Trial Data Analyst",
+                "Literature Research",
+                "Adverse Event Triage",
                 "Compound Similarity"
             ],
             task_descriptions={
@@ -26,24 +42,24 @@ def try_deterministic_route(prompt: str) -> Plan | None:
 
     # Determine single-domain matches
     matches = set()
-    
+
     # Safety is prioritized if explicit triage/AE terms exist
     if re.search(r'\b(adverse event|ae|safety|seriousness|serious event|toxicity|triage)\b', prompt_lower):
         matches.add("Adverse Event Triage")
-    
+
     # Trial matches
     if re.search(r'\b(trials?|studies|study|enrollment|enrolment|recruitment|sites?|clinical studies|clinical trials?)\b', prompt_lower):
         matches.add("Trial Data Analyst")
-        
+
     # Literature matches
     if re.search(r'\b(research|literature|document|papers|evidence|findings|internal research)\b', prompt_lower):
         matches.add("Literature Research")
-        
+
     # Similarity matches
     if re.search(r'\b(similar|similarity|related compounds?)\b', prompt_lower):
         matches.add("Compound Similarity")
 
-    # If it matches Adverse Event AND Trial (e.g. "adverse event for Trial TRL-0032"), 
+    # If it matches Adverse Event AND Trial (e.g. "adverse event for Trial TRL-0032"),
     # it's usually an AE triage task primarily. Let's refine conflicts:
     if "Adverse Event Triage" in matches and "Trial Data Analyst" in matches:
         if "triage" in prompt_lower or "adverse event" in prompt_lower:
@@ -58,7 +74,7 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             task_descriptions={selected: prompt},
             resolved_entities={}
         )
-    
+
     return None
 
 class PlannerNode:
@@ -67,12 +83,12 @@ class PlannerNode:
 
     def __call__(self, state: WorkflowState) -> dict:
         prompt_text = state.get('user_prompt', '')
-        
+
         # Fast deterministic path
         det_plan = try_deterministic_route(prompt_text)
         if det_plan:
             return {"plan": det_plan}
-            
+
         # Fallback to LLM
         prompt = """
 You are the Router/Planner.

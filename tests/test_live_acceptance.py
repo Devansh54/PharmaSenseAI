@@ -18,7 +18,7 @@ class OfflineAdapter(LLMProvider):
         # Simple heuristic to match schema to response
         schema_str = json.dumps(request.response_schema) if request.response_schema else ""
         prompt_str = str(request.messages)
-        
+
         # Determine expected type based on schema or prompt
         for r in self.responses:
             if not getattr(r, "_used", False):
@@ -55,7 +55,7 @@ class OfflineAdapter(LLMProvider):
             resp = self.responses[self.call_count]
             self.call_count += 1
             return resp
-            
+
         return LLMResponse(content=json.dumps({"error": "Mock exhausted"}))
 
 @pytest.fixture
@@ -83,15 +83,38 @@ def test_s1_trial_enrollment(pgvector_engine, run_mode, acceptance_gateway):
             LLMResponse(content=json.dumps({"is_supported": True, "reason": "Yes"}))
         ]
         acceptance_gateway = LLMGateway(OfflineAdapter(responses))
-    
+
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
-    
+
     assert state.get("errors", []) == []
     assert "Trial Data Analyst" in state.get("specialist_results", {})
     tools = state.get("actual_tools", [])
     if run_mode == "offline":
         assert any(t["tool_name"] == "sql_query_tool" for t in tools)
+
+def test_s1_invalid_query_id_regression(pgvector_engine, run_mode, acceptance_gateway):
+    """Regression test proving invalid query_id results in a tool failure."""
+    if run_mode == "live":
+        pytest.skip("Regression test is offline-only")
+
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="sql_query_tool", arguments={"query_id": "invalid_hallucinated_id", "parameters": {}})]),
+        LLMResponse(content=json.dumps({"summary": "I failed because of tool error", "limitations": []})),
+        LLMResponse(content=json.dumps({"is_supported": True, "reason": "Yes"}))
+    ]
+    acceptance_gateway = LLMGateway(OfflineAdapter(responses))
+
+    with pgvector_engine.connect() as conn:
+        state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
+
+    # Tool should have been called and returned an error
+    tools = state.get("actual_tools", [])
+    assert any(t["tool_name"] == "sql_query_tool" for t in tools)
+
+    # Find the sql tool execution
+    sql_exec = next(t for t in tools if t["tool_name"] == "sql_query_tool")
+    assert "validation error for SqlQueryInput" in sql_exec["result"].get("error", "")
 
 def test_s2_literature_rag(pgvector_engine, run_mode, acceptance_gateway):
     """S2: 'What has our internal research said about JAK2 inhibitors and cardiotoxicity?'"""
@@ -105,7 +128,7 @@ def test_s2_literature_rag(pgvector_engine, run_mode, acceptance_gateway):
 
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "What has our internal research said about JAK2 inhibitors and cardiotoxicity?")
-    
+
     assert state.get("errors", []) == []
     assert "Literature Research" in state.get("specialist_results", {})
 
@@ -121,7 +144,7 @@ def test_s3_adverse_event(pgvector_engine, run_mode, acceptance_gateway):
 
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "A site just reported a serious adverse event for Trial TRL-0032 — triage it.")
-    
+
     assert state.get("errors", []) == []
     assert "Adverse Event Triage" in state.get("specialist_results", {})
 
@@ -146,7 +169,7 @@ def test_s4_compound_full_picture(pgvector_engine, run_mode, acceptance_gateway)
 
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "Give me the full picture on compound DKU-1042: labs, trials, safety, and related literature.")
-    
+
     assert state.get("errors", []) == []
     assert "final_report" in state
 
@@ -162,7 +185,7 @@ def test_s5_compound_similarity(pgvector_engine, run_mode, acceptance_gateway):
 
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "Find compounds similar to DKU-1042 and explain why they are considered similar.")
-    
+
     assert state.get("errors", []) == []
     assert "Compound Similarity" in state.get("specialist_results", {})
 
@@ -185,7 +208,7 @@ def test_s6_report_writer(pgvector_engine, run_mode, acceptance_gateway):
 
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "Summarize the findings from the trial analysis and literature research for DKU-1042.")
-    
+
     assert state.get("errors", []) == []
     assert "final_report" in state
 
@@ -201,7 +224,7 @@ def test_s7_no_evidence(pgvector_engine, run_mode, acceptance_gateway):
 
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "What clinical trials involve compound UNKNOWN-999?")
-    
+
     assert state.get("errors", []) == []
     assert "Trial Data Analyst" in state.get("specialist_results", {})
 
@@ -213,9 +236,9 @@ def test_s8_medical_advice(pgvector_engine, run_mode, acceptance_gateway):
 
     with pgvector_engine.connect() as conn:
         state = run_acceptance_case(acceptance_gateway, conn, "What medication should a patient take for chest pain?")
-    
+
     assert state.get("errors") != []
     assert "Guardrail blocked request" in state.get("errors")[0]
-    
+
     if run_mode == "offline":
         assert adp.call_count == 0

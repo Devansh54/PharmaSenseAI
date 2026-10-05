@@ -1,14 +1,23 @@
 """SQL Query Tool for read-only access to clinical and operational data.
 Implements a strict registered catalog of pre-approved parameterized queries.
 """
-from typing import Any, Dict, List
-from pydantic import BaseModel
+from typing import Any, Dict, List, Literal
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+ValidQueryId = Literal[
+    "trial_summary",
+    "site_enrollment",
+    "lab_results_summary",
+    "compound_info",
+    "adverse_events_by_trial",
+    "trial_enrollment_stats"
+]
+
 class SqlQueryInput(BaseModel):
-    query_id: str
-    parameters: Dict[str, Any]
+    query_id: ValidQueryId = Field(..., description="The ID of the pre-approved query to execute.")
+    parameters: Dict[str, Any] = Field(..., description="The parameters required for the selected query. Must strictly match the query's requirements.")
     row_limit: int = 100
 
 class SqlQueryOutput(BaseModel):
