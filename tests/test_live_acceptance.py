@@ -369,3 +369,74 @@ def test_s3_markdown_finalization_is_rejected(acceptance_db_engine, run_mode, ac
 
     assert len(state.get("errors", [])) > 0
     assert any("not valid JSON" in err for err in state.get("errors", []))
+
+def test_ae_specialist_no_data_terminates_cleanly(acceptance_db_engine, run_mode):
+    """Regression test: AE specialist returns valid JSON when no data is found."""
+    if run_mode == "live":
+        pytest.skip("Offline only")
+
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="sql_query_tool", arguments={"query_id": "adverse_events_by_trial", "parameters": {"trial_id": "UNKNOWN"}})]),
+        LLMResponse(content=json.dumps({"explanation": "No records found.", "final_severity": "Unknown", "final_seriousness": None, "requires_review": False}), tool_calls=[])
+    ]
+
+    from pharmasense.llm.gateway import LLMGateway
+    from pharmasense.agents.adverse_event import create_ae_triage_agent
+
+    gateway = LLMGateway(OfflineAdapter(responses))
+    with Session(acceptance_db_engine) as session:
+        agent = create_ae_triage_agent(session, gateway)
+        result, tools = agent.run("Find AEs for UNKNOWN")
+
+    assert result.final_severity == "Unknown"
+    assert result.requires_review is False
+
+def test_compound_similarity_no_data_terminates_cleanly(acceptance_db_engine, run_mode):
+    """Regression test: Compound similarity returns valid JSON when no data is found."""
+    if run_mode == "live":
+        pytest.skip("Offline only")
+
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="compound_similarity_tool", arguments={"compound_id": "UNKNOWN"})]),
+        LLMResponse(content=json.dumps({"score": 0.0, "explanation": "No data found.", "coverage": 0.0}), tool_calls=[])
+    ]
+
+    from pharmasense.llm.gateway import LLMGateway
+    from pharmasense.agents.similarity import create_compound_similarity_agent
+
+    gateway = LLMGateway(OfflineAdapter(responses))
+    with Session(acceptance_db_engine) as session:
+        agent = create_compound_similarity_agent(session, gateway)
+        result, tools = agent.run("Compare UNKNOWN")
+
+    assert result.score == 0.0
+    assert result.coverage == 0.0
+
+def test_s4_continues_when_specialist_has_no_evidence(acceptance_db_engine, run_mode):
+    """Regression test: S4 completes successfully even if a specialist returns no data."""
+    if run_mode == "live":
+        pytest.skip("Offline only")
+
+    responses = [
+        # Trial
+        LLMResponse(content=json.dumps({"summary": "Trial info", "limitations": []})),
+        # Lit (NO EVIDENCE)
+        LLMResponse(content=json.dumps({"findings": "No evidence.", "citations": [], "no_evidence_found": True})),
+        # AE (NO EVIDENCE)
+        LLMResponse(content=json.dumps({"explanation": "No records.", "final_severity": "Unknown", "final_seriousness": None, "requires_review": False})),
+        # Sim (NO EVIDENCE)
+        LLMResponse(content=json.dumps({"score": 0.0, "explanation": "Missing data.", "coverage": 0.0})),
+        # Report Writer (Synthesis)
+        LLMResponse(content=json.dumps({"report_text": "Synthesized full picture report despite no evidence.", "limitations_noted": ["No AE data", "No Lit data"], "citations_resolved": []})),
+        # Output Guardrail
+        LLMResponse(content=json.dumps({"is_supported": True, "reason": "Yes"}))
+    ]
+
+    from pharmasense.llm.gateway import LLMGateway
+    gateway = LLMGateway(OfflineAdapter(responses))
+
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(gateway, session, "Give me the full picture on compound DKU-1042.")
+
+    assert state.get("errors", []) == []
+    assert "final_report" in state

@@ -17,6 +17,9 @@ You must return your findings using the predefined structured output schema for 
 ## Escalation Rules
 - If compounds cannot be compared due to missing features, highlight the coverage limitation.
 
+## Empty Data Rules
+- If your tool returns no data or missing features, you MUST still output the required JSON. Set `score` to 0.0, `coverage` to 0.0, and explain the missing data in `explanation`. Do NOT output conversational Markdown refusals.
+
 ## Examples
 
 **Example 1:**

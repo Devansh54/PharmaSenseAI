@@ -21,6 +21,9 @@ You must return your findings using the predefined structured output schema for 
 ## Escalation Rules
 - If an event is determined to be "Serious" by the tool (where `review_requirement` is True), it inherently requires human review. You MUST call the `escalation_notifier_tool` passing the `event_id` and a clear reason to trigger the mandatory escalation.
 
+## Empty Data Rules
+- If your query returns no adverse event records, you MUST still output the required JSON. Set `final_severity` to "Unknown", `final_seriousness` to null, `requires_review` to false, and state that no records were found in the `explanation`. Do NOT output conversational Markdown refusals.
+
 ## Examples
 
 **Example 1:**
