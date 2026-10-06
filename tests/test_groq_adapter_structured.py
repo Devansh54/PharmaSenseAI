@@ -23,6 +23,12 @@ def test_tool_call_request_has_no_response_format():
     assert "tools" in kwargs
     assert "response_format" not in kwargs
 
+    # But it STILL appends the system message instructing the schema
+    messages = kwargs["messages"]
+    assert any("json" in m["content"].lower() for m in messages)
+    assert messages[-1]["role"] == "system"
+    assert "instead of calling a tool" in messages[-1]["content"].lower()
+
 def test_final_structured_request_has_json_schema_and_no_tools():
     adapter = GroqAdapter(config=GroqAdapterConfig(api_key="fake"), client=MagicMock())
     req = LLMRequest(

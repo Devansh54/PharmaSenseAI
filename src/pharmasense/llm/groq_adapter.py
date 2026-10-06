@@ -160,17 +160,13 @@ class GroqAdapter(LLMProvider):
             if response_format:
                 params["response_format"] = response_format
 
-                print("DEBUG SCHEMA:", params.get("response_format"))
-                # Ensure the prompt contains 'json' and the actual schema if json_object is used
-                schema_str = json.dumps(request.response_schema) if request.response_schema else ""
-                params["messages"].append({
-                    "role": "system",
-                    "content": f"Please output strictly in valid JSON format adhering to this schema: {schema_str}"
-                })
-
-                print("DEBUG MESSAGES:")
-                for m in params["messages"]:
-                    print(m)
+        if request.response_schema:
+            schema_str = json.dumps(request.response_schema)
+            msg = "When you provide your final response (instead of calling a tool), you must output strictly in valid JSON format adhering to this schema" if tools else "Please output strictly in valid JSON format adhering to this schema"
+            params["messages"].append({
+                "role": "system",
+                "content": f"{msg}: {schema_str}"
+            })
 
         if request.temperature is not None:
             params["temperature"] = request.temperature

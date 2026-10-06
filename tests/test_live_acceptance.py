@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import pytest
 from unittest.mock import MagicMock
@@ -346,3 +346,26 @@ def test_s8_medical_advice(acceptance_db_engine, run_mode, acceptance_gateway):
 
     if run_mode == "offline":
         assert adp.call_count == 0
+
+def test_s3_markdown_finalization_is_rejected(acceptance_db_engine, run_mode, acceptance_gateway):
+    """Regression test proving that Markdown output at finalization is rejected."""
+    if run_mode == "live":
+        pytest.skip("Regression test is offline-only")
+
+    responses = [
+        # 1. SQL
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="ae_severity_classifier_tool", arguments={"severity": "unknown", "seriousness": "serious", "adverse_event_term": "headache"})]),
+        # 2. Escalation
+        LLMResponse(content="", tool_calls=[ToolCall(id="t2", name="escalation_notifier_tool", arguments={"event_id": "AE-123", "reason": "serious"})]),
+        # 3. Finalization - Malformed Markdown instead of JSON!
+        LLMResponse(content="## AE Triage Report\n\nI have finished triaging. It was serious. final_severity is Unknown.", tool_calls=[])
+    ]
+
+    adapter = OfflineAdapter(responses)
+    acceptance_gateway = LLMGateway(adapter)
+
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "A site just reported a serious adverse event for Trial TRL-0034 — triage it.")
+
+    assert len(state.get("errors", [])) > 0
+    assert any("not valid JSON" in err for err in state.get("errors", []))
