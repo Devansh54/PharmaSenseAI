@@ -1,16 +1,22 @@
 """Adverse Event Severity Classifier Tool.
 Applies deterministic versioned rules to classify seriousness and review requirements.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class AEClassifierInput(BaseModel):
-    severity: str | None = None
-    seriousness: str | None = None
-    adverse_event_term: str | None = None
+    severity: str = Field(
+        default="Unknown", description="The severity of the adverse event (e.g. Mild, Moderate, Severe, Fatal, Life-threatening, Unknown)."
+    )
+    seriousness: str = Field(
+        default="Unknown", description="The seriousness of the adverse event (e.g. Serious, Non-serious, Unknown)."
+    )
+    adverse_event_term: str = Field(
+        default="Unknown", description="The medical term for the adverse event."
+    )
 
 class AEClassifierOutput(BaseModel):
-    severity: str | None
-    seriousness: str | None
+    severity: str
+    seriousness: str
     missing_information: bool
     matched_rules: list[str]
     review_requirement: bool
@@ -18,7 +24,7 @@ class AEClassifierOutput(BaseModel):
 def ae_severity_classifier_tool(input_data: AEClassifierInput) -> AEClassifierOutput:
     """Classify adverse event based on deterministic rules."""
     missing = False
-    if not input_data.severity or not input_data.seriousness:
+    if not input_data.severity or not input_data.seriousness or input_data.severity.lower() == "unknown" or input_data.seriousness.lower() == "unknown":
         missing = True
 
     rules_matched = []
