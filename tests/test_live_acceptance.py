@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 import pytest
 from unittest.mock import MagicMock
@@ -106,8 +106,8 @@ def test_s1_trial_enrollment(acceptance_db_engine, run_mode, acceptance_gateway)
         adapter = OfflineAdapter(responses)
         acceptance_gateway = LLMGateway(adapter)
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "Which Phase II oncology trials are below 60% enrollment right now?")
 
     assert state.get("errors", []) == []
     assert "Trial Data Analyst" in state.get("specialist_results", {})
@@ -164,8 +164,8 @@ def test_s1_factual_correctness_regression(acceptance_db_engine, run_mode, accep
         conn.execute(text("INSERT INTO clinical_trials (trial_id, compound_id, trial_phase, therapeutic_area, status, target_enrollment) VALUES ('TRL-0037', 'C-01', 'Phase II', 'Oncology', 'Active', 100) ON CONFLICT DO NOTHING"))
         conn.execute(text("INSERT INTO trial_sites (site_id, trial_id, site_name, country, enrollment_count, site_status) VALUES ('S-01', 'TRL-0037', 'Site', 'US', 35, 'Active') ON CONFLICT DO NOTHING"))
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "Which Phase II oncology trials are below 60% enrollment right now?")
 
     # If the guardrail successfully caught the hallucination, state should contain an error or the guardrail failed the report.
     # The output guardrail will fail if is_supported is false.
@@ -190,8 +190,8 @@ def test_s1_factual_correctness_false_positive_regression(acceptance_db_engine, 
         conn.execute(text("INSERT INTO clinical_trials (trial_id, compound_id, trial_phase, therapeutic_area, status, target_enrollment) VALUES ('TRL-0019', 'C-01', 'Phase II', 'Oncology', 'Active', 100), ('TRL-0037', 'C-01', 'Phase II', 'Oncology', 'Active', 100) ON CONFLICT DO NOTHING"))
         conn.execute(text("INSERT INTO trial_sites (site_id, trial_id, site_name, country, enrollment_count, site_status) VALUES ('S-01', 'TRL-0019', 'Site', 'US', 59, 'Active'), ('S-02', 'TRL-0037', 'Site', 'US', 35, 'Active') ON CONFLICT DO NOTHING"))
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "Which Phase II oncology trials are below 60% enrollment right now?")
 
     assert state.get("errors") == []
     assert state.get("validation_feedback") is None
@@ -208,8 +208,8 @@ def test_s1_invalid_query_id_regression(acceptance_db_engine, run_mode, acceptan
     ]
     acceptance_gateway = LLMGateway(OfflineAdapter(responses))
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "Which Phase II oncology trials are below 60% enrollment right now?")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "Which Phase II oncology trials are below 60% enrollment right now?")
 
     # Tool should have been called and returned an error
     tools = state.get("actual_tools", [])
@@ -246,8 +246,8 @@ def test_s3_adverse_event(acceptance_db_engine, run_mode, acceptance_gateway):
         ]
         acceptance_gateway = LLMGateway(OfflineAdapter(responses))
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "A site just reported a serious adverse event for Trial TRL-0034 — triage it.")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "A site just reported a serious adverse event for Trial TRL-0034 — triage it.")
 
     assert state.get("errors", []) == []
     assert "Adverse Event Triage" in state.get("specialist_results", {})
@@ -271,8 +271,8 @@ def test_s4_compound_full_picture(acceptance_db_engine, run_mode, acceptance_gat
         ]
         acceptance_gateway = LLMGateway(OfflineAdapter(responses))
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "Give me the full picture on compound DKU-1042: labs, trials, safety, and related literature.")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "Give me the full picture on compound DKU-1042: labs, trials, safety, and related literature.")
 
     assert state.get("errors", []) == []
     assert "final_report" in state
@@ -287,8 +287,8 @@ def test_s5_compound_similarity(acceptance_db_engine, run_mode, acceptance_gatew
         ]
         acceptance_gateway = LLMGateway(OfflineAdapter(responses))
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "Find compounds similar to DKU-1042 and explain why they are considered similar.")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "Find compounds similar to DKU-1042 and explain why they are considered similar.")
 
     assert state.get("errors", []) == []
     assert "Compound Similarity" in state.get("specialist_results", {})
@@ -310,8 +310,8 @@ def test_s6_report_writer(acceptance_db_engine, run_mode, acceptance_gateway):
         ]
         acceptance_gateway = LLMGateway(OfflineAdapter(responses))
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "Summarize the findings from the trial analysis and literature research for DKU-1042.")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "Summarize the findings from the trial analysis and literature research for DKU-1042.")
 
     assert state.get("errors", []) == []
     assert "final_report" in state
@@ -326,8 +326,8 @@ def test_s7_no_evidence(acceptance_db_engine, run_mode, acceptance_gateway):
         ]
         acceptance_gateway = LLMGateway(OfflineAdapter(responses))
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "What clinical trials involve compound UNKNOWN-999?")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "What clinical trials involve compound UNKNOWN-999?")
 
     assert state.get("errors", []) == []
     assert "Trial Data Analyst" in state.get("specialist_results", {})
@@ -338,8 +338,8 @@ def test_s8_medical_advice(acceptance_db_engine, run_mode, acceptance_gateway):
         adp = OfflineAdapter([])
         acceptance_gateway = LLMGateway(adp)
 
-    with acceptance_db_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "What medication should a patient take for chest pain?")
+    with Session(acceptance_db_engine) as session:
+        state = run_acceptance_case(acceptance_gateway, session, "What medication should a patient take for chest pain?")
 
     assert state.get("errors") != []
     assert "Guardrail blocked request" in state.get("errors")[0]
