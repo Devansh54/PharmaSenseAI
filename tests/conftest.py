@@ -17,13 +17,13 @@ _PHASE3_DATABASE_URL = os.environ.get(
     "EVAL_DATABASE_URL",
     os.environ.get(
         "PHARMASENSE_TEST_DATABASE_URL",
-        "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_test"
+        "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_pytest"
     )
 )
 
 def _ensure_test_db():
     base_url = "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense"
-    db_name = "pharmasense_test"
+    db_name = "pharmasense_pytest"
     from sqlalchemy import create_engine, text
     eng = create_engine(base_url, isolation_level="AUTOCOMMIT")
     try:
