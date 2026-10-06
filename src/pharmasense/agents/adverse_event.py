@@ -15,6 +15,9 @@ class AETriageOutput(BaseModel):
     requires_review: bool = Field(..., description="Whether this event requires human review.")
 
 class AETriageAgent(BaseAgent):
+    def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
+        return super().run(prompt, single_tool_mode=False)
+
     def validate_finalization(self, output_obj: BaseModel, executed_tools: list[dict]) -> None:
         has_serious = getattr(output_obj, "final_seriousness", None) == "Serious"
         if not has_serious:
