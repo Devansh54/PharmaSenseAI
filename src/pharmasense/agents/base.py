@@ -36,6 +36,10 @@ class BaseAgent:
         self.model_name = model_name
         self._tool_specs = self._build_tool_specs()
 
+    def validate_finalization(self, output_obj: BaseModel, executed_tools: List[dict]) -> None:
+        """Hook for subclasses to enforce runtime invariants before accepting a final output."""
+        pass
+
     def _build_tool_specs(self) -> List[ToolSpec]:
         specs = []
         for name, func in self.tools.items():
@@ -106,14 +110,16 @@ class BaseAgent:
 
                 # 3. Check for final parsed output
                 if res.parsed:
-                    return self.output_model.model_validate(res.parsed), self.executed_tools
+                    parsed_obj = self.output_model.model_validate(res.parsed)
+                    self.validate_finalization(parsed_obj, self.executed_tools)
+                    return parsed_obj, self.executed_tools
 
                 if not res.tool_calls:
                     raise RuntimeError("LLM returned no tool calls and no valid parsed output.")
 
-            except (LLMGatewayError, RuntimeError) as e:
+            except (LLMGatewayError, RuntimeError, ValueError) as e:
                 error_str = str(e)
-                if "Structured output parsing failed" in error_str or "no valid parsed output" in error_str:
+                if "Structured output parsing failed" in error_str or "no valid parsed output" in error_str or "Finalization rejected" in error_str:
                     messages.append(Message(role="user", content=f"Your previous response was invalid. Error: {error_str}. Please correct it and output strictly the requested JSON schema or tool call."))
                     continue
                 raise

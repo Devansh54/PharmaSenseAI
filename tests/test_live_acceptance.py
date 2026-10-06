@@ -222,6 +222,7 @@ def test_s3_adverse_event(pgvector_engine, run_mode, acceptance_gateway):
     if run_mode == "offline":
         responses = [
             LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="ae_severity_classifier_tool", arguments={"severity": "unknown", "seriousness": "serious", "adverse_event_term": "headache"})]),
+            LLMResponse(content="", tool_calls=[ToolCall(id="t2", name="escalation_notifier_tool", arguments={"event_id": "AE-123", "reason": "serious"})]),
             LLMResponse(content=json.dumps({"explanation": "It was serious.", "final_severity": "Unknown", "final_seriousness": "Serious", "requires_review": True})),
             LLMResponse(content=json.dumps({"is_supported": True, "reason": "Yes"}))
         ]

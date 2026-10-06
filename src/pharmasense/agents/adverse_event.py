@@ -14,13 +14,33 @@ class AETriageOutput(BaseModel):
     final_seriousness: Optional[str] = Field(..., description="The final seriousness, strictly matching the tool output. Null if unknown.")
     requires_review: bool = Field(..., description="Whether this event requires human review.")
 
+class AETriageAgent(BaseAgent):
+    def validate_finalization(self, output_obj: BaseModel, executed_tools: list[dict]) -> None:
+        has_serious = getattr(output_obj, "final_seriousness", None) == "Serious"
+        if not has_serious:
+            for t in executed_tools:
+                if t["tool_name"] == "sql_query_tool":
+                    for row in t.get("result", {}).get("results", []):
+                        if row.get("seriousness") == "Serious":
+                            has_serious = True
+                            break
+
+        if has_serious:
+            classifier_called = any(t["tool_name"] == "ae_severity_classifier_tool" for t in executed_tools)
+            if not classifier_called:
+                raise ValueError("Finalization rejected: Serious AE detected. You MUST call ae_severity_classifier_tool to verify seriousness.")
+
+            escalation_called = any(t["tool_name"] == "escalation_notifier_tool" for t in executed_tools)
+            if not escalation_called:
+                raise ValueError("Finalization rejected: Serious AE detected. You MUST call escalation_notifier_tool to persist the human-review task.")
+
 def create_ae_triage_agent(session: Session, llm: LLMProvider, task_desc: str = "") -> BaseAgent:
     instruction_path = Path("agent_specs/ae_triage/instructions.md")
     full_instruction = instruction_path.read_text(encoding="utf-8")
     if "## Examples" in full_instruction:
         full_instruction = full_instruction.split("## Examples")[0].strip()
 
-    return BaseAgent(
+    return AETriageAgent(
         session=session,
         llm=llm,
         system_instruction=full_instruction,
@@ -30,5 +50,5 @@ def create_ae_triage_agent(session: Session, llm: LLMProvider, task_desc: str = 
             "escalation_notifier_tool": escalation_notifier_tool
         },
         output_model=AETriageOutput,
-        max_iterations=4
+        max_iterations=6
     )
