@@ -423,6 +423,61 @@ def test_compound_similarity_no_data_terminates_cleanly(acceptance_db_engine, ru
     assert result.score == 0.0
     assert result.coverage == 0.0
 
+def test_literature_no_data_terminates_cleanly(acceptance_db_engine, run_mode):
+    """Regression test: Literature research returns valid JSON when no data is found."""
+    if run_mode == "live":
+        pytest.skip("Offline only")
+
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="vector_search_tool", arguments={"query": "UNKNOWN"})]),
+        LLMResponse(content=json.dumps({"findings": "No data found.", "citations": [], "no_evidence_found": True}), tool_calls=[])
+    ]
+
+    from pharmasense.llm.gateway import LLMGateway
+    from pharmasense.agents.literature import create_literature_research_agent
+
+    gateway = LLMGateway(OfflineAdapter(responses))
+    with Session(acceptance_db_engine) as session:
+        agent = create_literature_research_agent(session, gateway)
+        result, tools = agent.run("Find papers for UNKNOWN")
+
+    assert result.no_evidence_found is True
+    assert result.citations == []
+
+def test_literature_programmatic_fallback_on_max_iterations(acceptance_db_engine, run_mode):
+    if run_mode == "live":
+        pytest.skip("Offline only")
+    # Simulate LLM always returning tool calls but never finalizing
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="vector_search_tool", arguments={"query": "UNKNOWN"})]),
+        LLMResponse(content="", tool_calls=[ToolCall(id="t2", name="vector_search_tool", arguments={"query": "UNKNOWN2"})])
+    ]
+    from pharmasense.llm.gateway import LLMGateway
+    from pharmasense.agents.literature import create_literature_research_agent
+    gateway = LLMGateway(OfflineAdapter(responses))
+    with Session(acceptance_db_engine) as session:
+        agent = create_literature_research_agent(session, gateway)
+        result, tools = agent.run("Find papers for UNKNOWN")
+    assert result.no_evidence_found is True
+    assert result.citations == []
+
+def test_similarity_programmatic_fallback_on_max_iterations(acceptance_db_engine, run_mode):
+    if run_mode == "live":
+        pytest.skip("Offline only")
+    # Simulate LLM always returning tool calls but never finalizing
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="compound_similarity_tool", arguments={"compound_1_attrs": {}, "compound_2_attrs": {}})]),
+        LLMResponse(content="", tool_calls=[ToolCall(id="t2", name="compound_similarity_tool", arguments={"compound_1_attrs": {}, "compound_2_attrs": {}})])
+    ]
+    from pharmasense.llm.gateway import LLMGateway
+    from pharmasense.agents.similarity import create_compound_similarity_agent
+    gateway = LLMGateway(OfflineAdapter(responses))
+    with Session(acceptance_db_engine) as session:
+        agent = create_compound_similarity_agent(session, gateway)
+        result, tools = agent.run("Compare UNKNOWN")
+    assert result.score == 0.0
+    assert result.coverage == 0.0
+
 def test_s4_continues_when_specialist_has_no_evidence(acceptance_db_engine, run_mode):
     """Regression test: S4 completes successfully even if a specialist returns no data."""
     if run_mode == "live":

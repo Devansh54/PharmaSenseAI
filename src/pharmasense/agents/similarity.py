@@ -11,9 +11,22 @@ class CompoundSimilarityAgentOutput(BaseModel):
     explanation: str = Field(..., description="Explanation of the similarity.")
     coverage: float = Field(..., description="The coverage score.")
 
+class CompoundSimilarityAgent(BaseAgent):
+    def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
+        try:
+            return super().run(prompt, single_tool_mode)
+        except RuntimeError as e:
+            if "Agent exceeded max iterations" in str(e):
+                return CompoundSimilarityAgentOutput(
+                    score=0.0,
+                    explanation="No valid comparison could be made due to missing data or attributes.",
+                    coverage=0.0
+                ), getattr(self, "executed_tools", [])
+            raise
+
 def create_compound_similarity_agent(session: Session, llm: LLMProvider) -> BaseAgent:
     instruction_path = Path("agent_specs/compound_similarity/instructions.md")
-    return BaseAgent(
+    return CompoundSimilarityAgent(
         session=session,
         llm=llm,
         system_instruction=instruction_path.read_text(encoding="utf-8"),

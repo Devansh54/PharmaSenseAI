@@ -10,9 +10,22 @@ class LiteratureResearchOutput(BaseModel):
     citations: list[str] = Field(default_factory=list, description="List of document chunk references.")
     no_evidence_found: bool = Field(default=False, description="True if no supporting evidence was retrieved.")
 
+class LiteratureResearchAgent(BaseAgent):
+    def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
+        try:
+            return super().run(prompt, single_tool_mode)
+        except RuntimeError as e:
+            if "Agent exceeded max iterations" in str(e):
+                return LiteratureResearchOutput(
+                    findings="No relevant literature found or could not execute search.",
+                    citations=[],
+                    no_evidence_found=True
+                ), getattr(self, "executed_tools", [])
+            raise
+
 def create_literature_research_agent(session: Session, llm: LLMProvider) -> BaseAgent:
     instruction_path = Path("agent_specs/literature_research/instructions.md")
-    return BaseAgent(
+    return LiteratureResearchAgent(
         session=session,
         llm=llm,
         system_instruction=instruction_path.read_text(encoding="utf-8"),
