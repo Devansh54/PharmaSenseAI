@@ -31,7 +31,7 @@ QUERY_CATALOG = {
     "site_enrollment": text("SELECT site_name, country, enrollment_count, site_status FROM trial_sites WHERE trial_id = :trial_id ORDER BY enrollment_count DESC"),
     "lab_results_summary": text("SELECT experiment_type, result_value, unit, pass_fail FROM lab_results WHERE compound_id = :compound_id ORDER BY result_date DESC"),
     "compound_info": text("SELECT compound_name, chemical_class, target_protein, discovery_phase FROM compounds WHERE compound_id = :compound_id"),
-    "adverse_events_by_trial": text("SELECT event_date, adverse_event_term, severity, seriousness, outcome FROM adverse_events WHERE trial_id = :trial_id"),
+    "adverse_events_by_trial": text("SELECT event_id, event_date, adverse_event_term, severity, seriousness, outcome FROM adverse_events WHERE trial_id = :trial_id"),
     "trial_enrollment_stats": text("""
         SELECT
             t.trial_id, t.trial_phase, t.therapeutic_area, t.status, t.target_enrollment,

@@ -21,7 +21,7 @@ def test_ae_triage_agent_permissions():
     agent = create_ae_triage_agent(MagicMock(), MagicMock())
     assert "sql_query_tool" in agent.tools
     assert "ae_severity_classifier_tool" in agent.tools
-    assert len(agent.tools) == 2
+    assert len(agent.tools) == 3
 
 def test_compound_similarity_agent_permissions():
     agent = create_compound_similarity_agent(MagicMock(), MagicMock())

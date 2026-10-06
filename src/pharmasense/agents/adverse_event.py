@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from pharmasense.llm.contracts import LLMProvider
 from pharmasense.tools.ae_classifier import ae_severity_classifier_tool
 from pharmasense.tools.sql_query import sql_query_tool
+from pharmasense.tools.escalation import escalation_notifier_tool
 from pharmasense.agents.base import BaseAgent
 
 class AETriageOutput(BaseModel):
@@ -25,7 +26,9 @@ def create_ae_triage_agent(session: Session, llm: LLMProvider, task_desc: str = 
         system_instruction=full_instruction,
         tools={
             "sql_query_tool": sql_query_tool,
-            "ae_severity_classifier_tool": ae_severity_classifier_tool
+            "ae_severity_classifier_tool": ae_severity_classifier_tool,
+            "escalation_notifier_tool": escalation_notifier_tool
         },
         output_model=AETriageOutput,
+        max_iterations=4
     )

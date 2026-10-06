@@ -14,11 +14,8 @@ from pharmasense.config import CSV_FILES, DATABASE_URL
 from pharmasense.contracts import LOAD_ORDER
 
 _PHASE3_DATABASE_URL = os.environ.get(
-    "EVAL_DATABASE_URL",
-    os.environ.get(
-        "PHARMASENSE_TEST_DATABASE_URL",
-        "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_pytest"
-    )
+    "PHARMASENSE_PYTEST_DATABASE_URL",
+    "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_pytest"
 )
 
 def _ensure_test_db():

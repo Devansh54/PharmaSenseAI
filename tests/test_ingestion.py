@@ -15,13 +15,13 @@ from pharmasense.data.ingest.import_csvs import import_all_csvs
 from pharmasense.data.ingest.drift import detect_drift
 
 DATABASE_URL = os.environ.get(
-    "PHARMASENSE_TEST_DATABASE_URL",
-    "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_test"
+    "PHARMASENSE_PYTEST_DATABASE_URL",
+    "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_pytest"
 )
 
 def _ensure_test_db():
     base_url = "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense"
-    db_name = "pharmasense_test"
+    db_name = "pharmasense_pytest"
     from sqlalchemy import create_engine, text
     eng = create_engine(base_url, isolation_level="AUTOCOMMIT")
     try:

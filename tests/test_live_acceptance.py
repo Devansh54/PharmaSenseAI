@@ -218,7 +218,7 @@ def test_s2_literature_rag(pgvector_engine, run_mode, acceptance_gateway):
     assert "Literature Research" in state.get("specialist_results", {})
 
 def test_s3_adverse_event(pgvector_engine, run_mode, acceptance_gateway):
-    """S3: 'A site just reported a serious adverse event for Trial TRL-0032 — triage it.'"""
+    """S3: 'A site just reported a serious adverse event for Trial TRL-0034 — triage it.'"""
     if run_mode == "offline":
         responses = [
             LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="ae_severity_classifier_tool", arguments={"severity": "unknown", "seriousness": "serious", "adverse_event_term": "headache"})]),
@@ -228,7 +228,7 @@ def test_s3_adverse_event(pgvector_engine, run_mode, acceptance_gateway):
         acceptance_gateway = LLMGateway(OfflineAdapter(responses))
 
     with pgvector_engine.connect() as conn:
-        state = run_acceptance_case(acceptance_gateway, conn, "A site just reported a serious adverse event for Trial TRL-0032 — triage it.")
+        state = run_acceptance_case(acceptance_gateway, conn, "A site just reported a serious adverse event for Trial TRL-0034 — triage it.")
 
     assert state.get("errors", []) == []
     assert "Adverse Event Triage" in state.get("specialist_results", {})
