@@ -4,8 +4,9 @@ import pytest
 from unittest.mock import MagicMock
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from pharmasense.llm.contracts import LLMProvider, LLMRequest, LLMResponse, ToolCall
+from pharmasense.llm.contracts import LLMProvider, LLMRequest, LLMResponse, ToolCall, Usage
 from pharmasense.llm.gateway import LLMGateway
+from pharmasense.llm.budget import BudgetEnforcingGateway, LLMBudgetExceededError, RunBudget
 from pharmasense.orchestration.graph import build_orchestration_graph
 from pharmasense.config import GatewayConfig
 
@@ -65,13 +66,23 @@ class OfflineAdapter(LLMProvider):
 def run_mode():
     return os.environ.get("ACCEPTANCE_MODE", "offline")
 
+# Default budget for live acceptance runs.  Generous enough for all
+# current cases (S4 multi-specialist fan-out uses ~6-12 LLM calls);
+# tight enough to abort runaway loops before Groq daily quota is hit.
+_LIVE_RUN_BUDGET = RunBudget(
+    max_llm_calls=int(os.environ.get("ACCEPTANCE_MAX_LLM_CALLS", "40")),
+    max_prompt_tokens=int(os.environ.get("ACCEPTANCE_MAX_PROMPT_TOKENS", "80000")),
+    max_completion_tokens=int(os.environ.get("ACCEPTANCE_MAX_COMPLETION_TOKENS", "20000")),
+)
+
 @pytest.fixture
 def acceptance_gateway(run_mode):
     if run_mode == "live":
         from pharmasense.llm.groq_adapter import GroqAdapter
         from pharmasense.config import GroqAdapterConfig
-        return LLMGateway(GroqAdapter(GroqAdapterConfig()))
-    return None # We will inject OfflineAdapter per test
+        inner = LLMGateway(GroqAdapter(GroqAdapterConfig()))
+        return BudgetEnforcingGateway(inner=inner, budget=_LIVE_RUN_BUDGET)
+    return None  # We will inject OfflineAdapter per test
 
 def get_acceptance_db_engine_generator(run_mode, pgvector_engine):
     if run_mode == "live":
