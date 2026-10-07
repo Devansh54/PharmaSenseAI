@@ -211,3 +211,40 @@ def test_analysis_citations_fallback():
         assert len(data["citations"]) == 1
         assert data["citations"][0]["claim"] == "Evidence retrieved by specialists"
         assert data["citations"][0]["citations"] == ["CHUNK-1", "CHUNK-2"]
+
+def test_analysis_citations_fallback_no_evidence():
+    state = {
+        "final_report": {
+            "report_content": "No actionable evidence",
+            "citations_resolved": [],
+            "limitations_noted": []
+        },
+        "specialist_results": {
+            "Literature Research": {
+                "findings": "No literature findings",
+                "citations": [],
+                "no_evidence_found": True
+            }
+        },
+        "actual_tools": [
+            {
+                "tool_name": "vector_search_tool",
+                "arguments": {"query": "test"},
+                "result": {
+                    "chunks": [
+                        {"chunk_id": "IRRELEVANT-1"},
+                        {"chunk_id": "IRRELEVANT-2"}
+                    ],
+                    "index_version": "v1"
+                }
+            }
+        ],
+        "errors": []
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post("/v1/analyses", json={"user_prompt": "Hello"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "no_evidence"
+        assert len(data["citations"]) == 0
+

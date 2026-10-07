@@ -69,25 +69,50 @@ async def create_analysis(
         
     findings = report.get("report_content", report.get("report_text", "No report generated."))
     
+    limitations = report.get("limitations_noted", report.get("limitations", []))
+    
+    status_str = "success"
+    specialist_results = state.get("specialist_results", {})
+    
+    all_no_evidence = False
+    if specialist_results:
+        all_no_evidence = True
+        for name, res in specialist_results.items():
+            if isinstance(res, dict) and res.get("no_evidence_found") is True:
+                continue
+            all_no_evidence = False
+            break
+            
+    if all_no_evidence:
+        status_str = "no_evidence"
+    elif any("No_evidence_found = True" in l for l in limitations) or "no evidence was identified" in findings.lower() or "no actionable evidence" in findings.lower() or "no clinical trials" in findings.lower():
+        status_str = "no_evidence"
+    elif errors or "could not be fully verified" in findings:
+        status_str = "partial_success"
+
     citations_data = report.get("citations_resolved", [])
     citations = [
         CitationOut(claim=c.get("claim", ""), citations=c.get("citations", []), invalid_chunk_ids=c.get("invalid_chunk_ids", []))
         for c in citations_data
     ]
     
-    if not citations:
+    if not citations and status_str != "no_evidence":
         specialist_citations = []
-        for name, res in state.get("specialist_results", {}).items():
+        for name, res in specialist_results.items():
             if isinstance(res, dict) and "citations" in res and isinstance(res["citations"], list):
                 specialist_citations.extend(res["citations"])
         
-        for tool_run in state.get("actual_tools", []):
-            if tool_run.get("tool_name") == "vector_search_tool":
-                tool_result = tool_run.get("result", {})
-                if isinstance(tool_result, dict) and "chunks" in tool_result:
-                    for chunk in tool_result.get("chunks", []):
-                        if "chunk_id" in chunk:
-                            specialist_citations.append(chunk["chunk_id"])
+        lit_res = specialist_results.get("Literature Research", {})
+        lit_no_evidence = isinstance(lit_res, dict) and lit_res.get("no_evidence_found") is True
+        
+        if not lit_no_evidence:
+            for tool_run in state.get("actual_tools", []):
+                if tool_run.get("tool_name") == "vector_search_tool":
+                    tool_result = tool_run.get("result", {})
+                    if isinstance(tool_result, dict) and "chunks" in tool_result:
+                        for chunk in tool_result.get("chunks", []):
+                            if "chunk_id" in chunk:
+                                specialist_citations.append(chunk["chunk_id"])
         
         unique_citations = list(dict.fromkeys(specialist_citations))
         if unique_citations:
@@ -96,14 +121,6 @@ async def create_analysis(
                 citations=unique_citations,
                 invalid_chunk_ids=[]
             ))
-    
-    limitations = report.get("limitations_noted", report.get("limitations", []))
-    
-    status_str = "success"
-    if any("No_evidence_found = True" in l for l in limitations) or "no evidence was identified" in findings.lower() or "no actionable evidence" in findings.lower() or "no clinical trials" in findings.lower():
-        status_str = "no_evidence"
-    elif errors or "could not be fully verified" in findings:
-        status_str = "partial_success"
         
     branch_outcomes = {
         name: res.get("summary") or res.get("findings") or res.get("explanation") or str(res)
