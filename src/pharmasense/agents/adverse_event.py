@@ -16,7 +16,17 @@ class AETriageOutput(BaseModel):
 
 class AETriageAgent(BaseAgent):
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
-        return super().run(prompt, single_tool_mode=False)
+        try:
+            return super().run(prompt, single_tool_mode=False)
+        except RuntimeError as e:
+            if "Agent exceeded max iterations" in str(e):
+                return AETriageOutput(
+                    explanation="No records found or search could not be executed.",
+                    final_severity="Unknown",
+                    final_seriousness=None,
+                    requires_review=False
+                ), getattr(self, "executed_tools", [])
+            raise
 
     def validate_finalization(self, output_obj: BaseModel, executed_tools: list[dict]) -> None:
         has_serious = getattr(output_obj, "final_seriousness", None) == "Serious"
