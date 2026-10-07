@@ -9,6 +9,18 @@ class TrialDataAnalystOutput(BaseModel):
     summary: str = Field(..., description="The summary of the trial/site/lab data findings.")
     limitations: list[str] = Field(default_factory=list, description="Any data limitations encountered.")
 
+class TrialDataAnalystAgent(BaseAgent):
+    def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
+        try:
+            return super().run(prompt, single_tool_mode)
+        except RuntimeError as e:
+            if "Agent exceeded max iterations" in str(e):
+                return TrialDataAnalystOutput(
+                    summary="No data found or search could not be executed.",
+                    limitations=["Agent exceeded max iterations before producing valid output."]
+                ), getattr(self, "executed_tools", [])
+            raise
+
 def create_trial_data_analyst(session: Session, llm: LLMProvider, task_desc: str = "") -> BaseAgent:
     instruction_path = Path("agent_specs/trial_data_analyst/instructions.md")
     full_instruction = instruction_path.read_text(encoding="utf-8")
@@ -49,7 +61,7 @@ def create_trial_data_analyst(session: Session, llm: LLMProvider, task_desc: str
     if "## Examples" in full_instruction:
         full_instruction = full_instruction.split("## Examples")[0].strip()
 
-    return BaseAgent(
+    return TrialDataAnalystAgent(
         session=session,
         llm=llm,
         system_instruction=full_instruction,

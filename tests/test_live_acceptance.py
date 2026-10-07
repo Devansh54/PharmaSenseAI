@@ -478,6 +478,23 @@ def test_similarity_programmatic_fallback_on_max_iterations(acceptance_db_engine
     assert result.score == 0.0
     assert result.coverage == 0.0
 
+def test_trial_programmatic_fallback_on_max_iterations(acceptance_db_engine, run_mode):
+    if run_mode == "live":
+        pytest.skip("Offline only")
+    # Simulate LLM always returning tool calls but never finalizing
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="sql_query_tool", arguments={"query_id": "trial_summary", "parameters": {"compound_id": "UNKNOWN"}})]),
+        LLMResponse(content="", tool_calls=[ToolCall(id="t2", name="sql_query_tool", arguments={"query_id": "trial_summary", "parameters": {"compound_id": "UNKNOWN"}})])
+    ]
+    from pharmasense.llm.gateway import LLMGateway
+    from pharmasense.agents.trial import create_trial_data_analyst
+    gateway = LLMGateway(OfflineAdapter(responses))
+    with Session(acceptance_db_engine) as session:
+        agent = create_trial_data_analyst(session, gateway)
+        result, tools = agent.run("Find trial for UNKNOWN")
+    assert result.summary == "No data found or search could not be executed."
+    assert "Agent exceeded max iterations" in result.limitations[0]
+
 def test_s4_continues_when_specialist_has_no_evidence(acceptance_db_engine, run_mode):
     """Regression test: S4 completes successfully even if a specialist returns no data."""
     if run_mode == "live":
