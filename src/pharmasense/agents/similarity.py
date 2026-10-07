@@ -13,6 +13,39 @@ class CompoundSimilarityAgentOutput(BaseModel):
 
 class CompoundSimilarityAgent(BaseAgent):
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
+        original_llm = self.llm
+        
+        class InterceptingLLM(LLMProvider):
+            def __init__(self, base_llm):
+                self.base_llm = base_llm
+                
+            def complete(self, request):
+                from pharmasense.llm.contracts import LLMInvalidOutputError, LLMResponse
+                try:
+                    res = self.base_llm.complete(request)
+                    if not res.tool_calls and not res.parsed:
+                        return LLMResponse(
+                            content="",
+                            tool_calls=[],
+                            parsed={
+                                "score": 0.0,
+                                "explanation": "No valid comparison could be made due to missing data or attributes.",
+                                "coverage": 0.0
+                            }
+                        )
+                    return res
+                except LLMInvalidOutputError:
+                    return LLMResponse(
+                        content="",
+                        tool_calls=[],
+                        parsed={
+                            "score": 0.0,
+                            "explanation": "No valid comparison could be made due to missing data or attributes.",
+                            "coverage": 0.0
+                        }
+                    )
+
+        self.llm = InterceptingLLM(original_llm)
         try:
             return super().run(prompt, single_tool_mode)
         except RuntimeError as e:
@@ -23,6 +56,8 @@ class CompoundSimilarityAgent(BaseAgent):
                     coverage=0.0
                 ), getattr(self, "executed_tools", [])
             raise
+        finally:
+            self.llm = original_llm
 
 def create_compound_similarity_agent(session: Session, llm: LLMProvider) -> BaseAgent:
     instruction_path = Path("agent_specs/compound_similarity/instructions.md")

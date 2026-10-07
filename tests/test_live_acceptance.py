@@ -461,6 +461,26 @@ def test_literature_programmatic_fallback_on_max_iterations(acceptance_db_engine
     assert result.no_evidence_found is True
     assert result.citations == []
 
+def test_similarity_deterministic_termination_on_invalid_output(acceptance_db_engine, run_mode):
+    if run_mode == "live":
+        pytest.skip("Offline only")
+    # Simulate LLM returning conversational Markdown that fails JSON parsing
+    responses = [
+        LLMResponse(content="I cannot provide this.", tool_calls=[])
+    ]
+    from pharmasense.llm.gateway import LLMGateway
+    from pharmasense.agents.similarity import create_compound_similarity_agent
+    
+    # We must patch the gateway's validation manually for the offline adapter to simulate the error.
+    # The OfflineAdapter just returns the raw LLMResponse, but the LLMGateway will run validation on it.
+    # If content="I cannot provide this.", LLMGateway throws LLMInvalidOutputError.
+    gateway = LLMGateway(OfflineAdapter(responses))
+    with Session(acceptance_db_engine) as session:
+        agent = create_compound_similarity_agent(session, gateway)
+        result, tools = agent.run("Compare UNKNOWN")
+    assert result.score == 0.0
+    assert result.coverage == 0.0
+
 def test_similarity_programmatic_fallback_on_max_iterations(acceptance_db_engine, run_mode):
     if run_mode == "live":
         pytest.skip("Offline only")
