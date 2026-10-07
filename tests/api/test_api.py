@@ -186,9 +186,22 @@ def test_analysis_citations_fallback():
         "specialist_results": {
             "Literature Research": {
                 "findings": "Some literature findings",
-                "citations": ["CHUNK-1", "CHUNK-2"]
+                "citations": []  # Simulate agent dropping citations
             }
         },
+        "actual_tools": [
+            {
+                "tool_name": "vector_search_tool",
+                "arguments": {"query": "test"},
+                "result": {
+                    "chunks": [
+                        {"chunk_id": "CHUNK-1"},
+                        {"chunk_id": "CHUNK-2"}
+                    ],
+                    "index_version": "v1"
+                }
+            }
+        ],
         "errors": []
     }
     with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):

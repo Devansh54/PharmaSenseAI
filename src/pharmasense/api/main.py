@@ -81,6 +81,14 @@ async def create_analysis(
             if isinstance(res, dict) and "citations" in res and isinstance(res["citations"], list):
                 specialist_citations.extend(res["citations"])
         
+        for tool_run in state.get("actual_tools", []):
+            if tool_run.get("tool_name") == "vector_search_tool":
+                tool_result = tool_run.get("result", {})
+                if isinstance(tool_result, dict) and "chunks" in tool_result:
+                    for chunk in tool_result.get("chunks", []):
+                        if "chunk_id" in chunk:
+                            specialist_citations.append(chunk["chunk_id"])
+        
         unique_citations = list(dict.fromkeys(specialist_citations))
         if unique_citations:
             citations.append(CitationOut(
