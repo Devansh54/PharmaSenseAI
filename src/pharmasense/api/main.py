@@ -12,7 +12,7 @@ from pharmasense.api.models import (
     EvidenceOut, ReviewDecisionIn, ReviewTaskOut, ReviewDecisionOut
 )
 from pharmasense.db.models import DocumentChunk, ReviewTask, ReviewDecision
-from pharmasense.config import DATABASE_URL
+from pharmasense.config import DATABASE_URL, GroqAdapterConfig
 import os
 from pharmasense.llm.gateway import LLMGateway
 from pharmasense.llm.groq_adapter import GroqAdapter
@@ -29,10 +29,9 @@ def get_db_session():
         yield session
 
 def build_gateway():
-    api_key = os.environ.get("GROQ_API_KEY", "mock")
-    model = os.environ.get("LLM_MODEL", "qwen/qwen3.8-27b")
-    adapter = GroqAdapter(api_key=api_key, model=model)
-    return BudgetEnforcingGateway(LLMGateway(adapter), max_daily_cost=10.0, max_tpm=30000, max_itpm=30000)
+    config = GroqAdapterConfig()
+    adapter = GroqAdapter(config=config)
+    return BudgetEnforcingGateway(inner=LLMGateway(adapter))
 
 @app.post("/v1/analyses", response_model=AnalysisResponse)
 async def create_analysis(
@@ -75,6 +74,20 @@ async def create_analysis(
         CitationOut(claim=c.get("claim", ""), citations=c.get("citations", []), invalid_chunk_ids=c.get("invalid_chunk_ids", []))
         for c in citations_data
     ]
+    
+    if not citations:
+        specialist_citations = []
+        for name, res in state.get("specialist_results", {}).items():
+            if isinstance(res, dict) and "citations" in res and isinstance(res["citations"], list):
+                specialist_citations.extend(res["citations"])
+        
+        unique_citations = list(dict.fromkeys(specialist_citations))
+        if unique_citations:
+            citations.append(CitationOut(
+                claim="Evidence retrieved by specialists",
+                citations=unique_citations,
+                invalid_chunk_ids=[]
+            ))
     
     limitations = report.get("limitations_noted", report.get("limitations", []))
     

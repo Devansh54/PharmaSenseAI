@@ -170,3 +170,31 @@ def test_analysis_partial_success():
 def test_analysis_malformed():
     response = client.post("/v1/analyses", json={"wrong_field": "Hello"})
     assert response.status_code == 422
+
+def test_build_gateway_configuration():
+    from pharmasense.llm.budget import BudgetEnforcingGateway
+    gateway = build_gateway()
+    assert isinstance(gateway, BudgetEnforcingGateway)
+
+def test_analysis_citations_fallback():
+    state = {
+        "final_report": {
+            "report_content": "Valid answer",
+            "citations_resolved": [],
+            "limitations_noted": []
+        },
+        "specialist_results": {
+            "Literature Research": {
+                "findings": "Some literature findings",
+                "citations": ["CHUNK-1", "CHUNK-2"]
+            }
+        },
+        "errors": []
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post("/v1/analyses", json={"user_prompt": "Hello"})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["citations"]) == 1
+        assert data["citations"][0]["claim"] == "Evidence retrieved by specialists"
+        assert data["citations"][0]["citations"] == ["CHUNK-1", "CHUNK-2"]
