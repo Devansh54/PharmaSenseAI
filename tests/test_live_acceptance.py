@@ -478,6 +478,23 @@ def test_similarity_programmatic_fallback_on_max_iterations(acceptance_db_engine
     assert result.score == 0.0
     assert result.coverage == 0.0
 
+def test_ae_deterministic_termination_on_empty_data(acceptance_db_engine, run_mode):
+    if run_mode == "live":
+        pytest.skip("Offline only")
+    # Simulate LLM returning exactly one tool call, and then the tool returns empty.
+    # The interceptor should return the final parsed output without making a second LLM call.
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall(id="t1", name="sql_query_tool", arguments={"query_id": "adverse_events_by_trial", "parameters": {"trial_id": "UNKNOWN"}})])
+    ]
+    from pharmasense.llm.gateway import LLMGateway
+    from pharmasense.agents.adverse_event import create_ae_triage_agent
+    gateway = LLMGateway(OfflineAdapter(responses))
+    with Session(acceptance_db_engine) as session:
+        agent = create_ae_triage_agent(session, gateway)
+        result, tools = agent.run("Find AEs for UNKNOWN")
+    assert result.final_severity == "Unknown"
+    assert result.requires_review is False
+
 def test_ae_programmatic_fallback_on_max_iterations(acceptance_db_engine, run_mode):
     if run_mode == "live":
         pytest.skip("Offline only")

@@ -16,6 +16,34 @@ class AETriageOutput(BaseModel):
 
 class AETriageAgent(BaseAgent):
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
+        original_llm = self.llm
+        
+        class InterceptingLLM(LLMProvider):
+            def __init__(self, base_llm, agent):
+                self.base_llm = base_llm
+                self.agent = agent
+                
+            def complete(self, request) -> 'LLMResponse':
+                if self.agent.executed_tools:
+                    last = self.agent.executed_tools[-1]
+                    if last["tool_name"] == "sql_query_tool":
+                        res = last.get("result", {})
+                        if isinstance(res, dict) and "results" in res and len(res["results"]) == 0:
+                            from pharmasense.llm.contracts import LLMResponse
+                            return LLMResponse(
+                                content="",
+                                tool_calls=[],
+                                parsed={
+                                    "explanation": "No records found or search could not be executed.",
+                                    "final_severity": "Unknown",
+                                    "final_seriousness": None,
+                                    "requires_review": False
+                                }
+                            )
+                return self.base_llm.complete(request)
+                
+        self.llm = InterceptingLLM(original_llm, self)
+        
         try:
             return super().run(prompt, single_tool_mode=False)
         except RuntimeError as e:
@@ -27,6 +55,8 @@ class AETriageAgent(BaseAgent):
                     requires_review=False
                 ), getattr(self, "executed_tools", [])
             raise
+        finally:
+            self.llm = original_llm
 
     def validate_finalization(self, output_obj: BaseModel, executed_tools: list[dict]) -> None:
         has_serious = getattr(output_obj, "final_seriousness", None) == "Serious"
