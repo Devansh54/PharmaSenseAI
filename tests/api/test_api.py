@@ -248,3 +248,55 @@ def test_analysis_citations_fallback_no_evidence():
         assert data["status"] == "no_evidence"
         assert len(data["citations"]) == 0
 
+
+def test_analysis_escalation_reference_populated():
+    state = {
+        "final_report": {
+            "report_content": "Severe AE detected",
+            "citations_resolved": [],
+            "limitations_noted": []
+        },
+        "specialist_results": {
+            "Adverse Event Triage": {
+                "summary": "Triage done"
+            }
+        },
+        "actual_tools": [
+            {
+                "tool_name": "escalation_notifier_tool",
+                "arguments": {"event_id": "EV-1", "reason": "Severe"},
+                "result": {
+                    "task_id": "REV-125dcef9",
+                    "persisted": True,
+                    "delivery_status": "Mock Delivery"
+                }
+            }
+        ],
+        "errors": []
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post("/v1/analyses", json={"user_prompt": "Triage TRL-0034"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["escalation_reference"] == "REV-125dcef9"
+
+def test_analysis_escalation_reference_null():
+    state = {
+        "final_report": {
+            "report_content": "No severe AE detected",
+            "citations_resolved": [],
+            "limitations_noted": []
+        },
+        "specialist_results": {
+            "Adverse Event Triage": {
+                "summary": "Triage done"
+            }
+        },
+        "actual_tools": [],
+        "errors": []
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post("/v1/analyses", json={"user_prompt": "Triage TRL-0034"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["escalation_reference"] is None

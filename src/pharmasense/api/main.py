@@ -127,13 +127,21 @@ async def create_analysis(
         for name, res in state.get("specialist_results", {}).items()
     }
     
+    escalation_reference = None
+    for tool_run in state.get("actual_tools", []):
+        if tool_run.get("tool_name") == "escalation_notifier_tool":
+            tool_res = tool_run.get("result", {})
+            if isinstance(tool_res, dict) and "task_id" in tool_res:
+                escalation_reference = tool_res["task_id"]
+                break
+    
     return AnalysisResponse(
         status=status_str,
         findings=findings,
         citations=citations,
         limitations=limitations,
         branch_outcomes=branch_outcomes,
-        escalation_reference=state.get("escalation_task_id"),
+        escalation_reference=escalation_reference,
         timing_sec=latency,
         total_tokens=None,
         error_message="|".join(errors) if errors else None
