@@ -6,10 +6,16 @@ from pharmasense.llm.contracts import LLMProvider
 from pharmasense.tools.compound_similarity import compound_similarity_tool
 from pharmasense.agents.base import BaseAgent
 
+from typing import List
+
+class CandidateSummary(BaseModel):
+    compound_id: str
+    score: float
+
 class CompoundSimilarityAgentOutput(BaseModel):
-    score: float = Field(..., description="The calculated attribute similarity score.")
+    top_candidates: List[CandidateSummary] = Field(..., description="List of top similar candidates and their scores.")
     explanation: str = Field(..., description="Explanation of the similarity.")
-    coverage: float = Field(..., description="The coverage score.")
+    coverage: float = Field(..., description="The coverage score of the comparison.")
 
 class CompoundSimilarityAgent(BaseAgent):
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
@@ -28,7 +34,7 @@ class CompoundSimilarityAgent(BaseAgent):
                             content="",
                             tool_calls=[],
                             parsed={
-                                "score": 0.0,
+                                "top_candidates": [],
                                 "explanation": "No valid comparison could be made due to missing data or attributes.",
                                 "coverage": 0.0
                             }
@@ -39,7 +45,7 @@ class CompoundSimilarityAgent(BaseAgent):
                         content="",
                         tool_calls=[],
                         parsed={
-                            "score": 0.0,
+                            "top_candidates": [],
                             "explanation": "No valid comparison could be made due to missing data or attributes.",
                             "coverage": 0.0
                         }
@@ -51,7 +57,7 @@ class CompoundSimilarityAgent(BaseAgent):
         except RuntimeError as e:
             if "Agent exceeded max iterations" in str(e):
                 return CompoundSimilarityAgentOutput(
-                    score=0.0,
+                    top_candidates=[],
                     explanation="No valid comparison could be made due to missing data or attributes.",
                     coverage=0.0
                 ), getattr(self, "executed_tools", [])

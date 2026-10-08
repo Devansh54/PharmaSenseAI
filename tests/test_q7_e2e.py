@@ -51,7 +51,7 @@ class MockLLM(LLMProvider):
                 content="",
                 tool_calls=[],
                 parsed={
-                    "score": 0.563,
+                    "top_candidates": [{"compound_id": "CMP-0133", "score": 0.563}],
                     "explanation": "CMP-0133 is highly similar to VLX-1000.",
                     "coverage": 1.0
                 }
