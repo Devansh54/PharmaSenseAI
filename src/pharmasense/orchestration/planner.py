@@ -5,8 +5,20 @@ from pharmasense.orchestration.state import Plan, WorkflowState
 def try_deterministic_route(prompt: str) -> Plan | None:
     prompt_lower = prompt.lower()
 
-    # Specific map for high-confidence trial enrollment workflows (e.g., S1)
-    if "enrollment" in prompt_lower and "below" in prompt_lower and "trials" in prompt_lower:
+    # 1. Out-of-scope / Medical Advice
+    if re.search(r'\b(medical advice|treatment|prescribe|prescription|medication should a patient take|drug should i prescribe|treatment should this patient take)\b', prompt_lower):
+        # We can simulate an empty plan that the orchestrator will fail on, 
+        # or we can raise an error/return a plan with no specialists. 
+        # The planner raises an error if selected_specialists is empty.
+        return Plan(
+            workflow_type="single",
+            selected_specialists=[],
+            task_descriptions={},
+            resolved_entities={}
+        )
+
+    # 2. Specific map for high-confidence trial enrollment workflows (e.g., S1)
+    if re.search(r'\b(enrollment|enrolled)\b', prompt_lower) and re.search(r'\b(below|less than|behind)\b', prompt_lower) and re.search(r'\b(trials|studies)\b', prompt_lower):
         return Plan(
             workflow_type="single",
             selected_specialists=["Trial Data Analyst"],
@@ -22,8 +34,8 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             resolved_entities={}
         )
 
-    # Specific map for site-level details (e.g., Q3)
-    if re.search(r'\b(site|sites)\b', prompt_lower) and "trials" in prompt_lower:
+    # 3. Specific map for site-level details (e.g., Q3)
+    if re.search(r'\b(site|sites|site-level|clinical sites?)\b', prompt_lower) and re.search(r'\b(trials|studies)\b', prompt_lower):
         return Plan(
             workflow_type="single",
             selected_specialists=["Trial Data Analyst"],
@@ -38,8 +50,8 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             resolved_entities={}
         )
 
-    # Multi-agent "full picture"
-    if any(p in prompt_lower for p in ["full picture", "overall profile", "compound investigation"]):
+    # 4. Multi-agent "full picture"
+    if re.search(r'\b(full picture|overall profile|compound investigation|summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower):
         return Plan(
             workflow_type="parallel",
             selected_specialists=[
@@ -61,11 +73,11 @@ def try_deterministic_route(prompt: str) -> Plan | None:
     matches = set()
 
     # Safety is prioritized if explicit triage/AE terms exist
-    if re.search(r'\b(adverse event|ae|safety|seriousness|serious event|toxicity|triage)\b', prompt_lower):
+    if re.search(r'\b(adverse event|ae|safety|safety event|seriousness|serious event|toxicity|triage)\b', prompt_lower):
         matches.add("Adverse Event Triage")
 
     # Trial matches
-    if re.search(r'\b(trials?|studies|study|enrollment|enrolment|recruitment|sites?|clinical studies|clinical trials?)\b', prompt_lower):
+    if re.search(r'\b(trials?|studies|study|enrollment|enrolment|recruitment|sites?|clinical studies|clinical trials?|lab|labs|laboratory|assay|results?)\b', prompt_lower):
         matches.add("Trial Data Analyst")
 
     # Literature matches
@@ -73,7 +85,7 @@ def try_deterministic_route(prompt: str) -> Plan | None:
         matches.add("Literature Research")
 
     # Similarity matches
-    if re.search(r'\b(similar|similarity|related compounds?)\b', prompt_lower):
+    if re.search(r'\b(similar|similarity|related compounds?|comparable)\b', prompt_lower):
         matches.add("Compound Similarity")
 
     # If it matches Adverse Event AND Trial (e.g. "adverse event for Trial TRL-0032"),
@@ -104,6 +116,11 @@ class PlannerNode:
         # Fast deterministic path
         det_plan = try_deterministic_route(prompt_text)
         if det_plan:
+            if not det_plan.selected_specialists:
+                return {
+                    "errors": ["Out-of-scope request blocked."],
+                    "final_report": {"report_content": "I cannot provide personalized medical advice or treatment recommendations."}
+                }
             return {"plan": det_plan}
 
         # Fallback to LLM
