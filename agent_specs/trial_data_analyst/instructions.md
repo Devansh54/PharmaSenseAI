@@ -13,7 +13,8 @@ You must use one of the exact `query_id`s below. Do NOT invent new IDs.
 - **`lab_results_summary`**: Lists experiment results for a specific compound, ordered by date. Parameters: `compound_id` (str).
 - **`compound_info`**: Retrieves compound properties (class, target, phase). Parameters: `compound_id` (str).
 - **`adverse_events_by_trial`**: Lists all adverse events for a trial. Parameters: `trial_id` (str).
-- **`trial_enrollment_stats`**: Retrieves trials with their current vs target enrollment. Parameters: `trial_phase` (str, optional, e.g. "Phase II"), `therapeutic_area` (str, optional, e.g. "Oncology"), `threshold_pct` (float, optional, e.g. 60.0 for 60%). Note: The query returns an `is_below_threshold` boolean if `threshold_pct` is provided. You MUST rely on this boolean and NOT perform arithmetic comparisons yourself.
+- **`trial_enrollment_stats`**: Retrieves trials with their current vs target enrollment. Parameters: `trial_phase` (str, optional, e.g. "Phase II"), `therapeutic_area` (str, optional, e.g. "Oncology"), `threshold_pct` (float, optional). Note: The query returns an `is_below_threshold` boolean if `threshold_pct` is provided. You MUST rely on this boolean and NOT perform arithmetic comparisons yourself.
+- **`sites_by_trial_attributes`**: Retrieves site-level details (site name, country, enrollment, status) across trials filtered by trial attributes. Use this if the user asks for site-level info or specific sites for certain trial phases/areas. Parameters: `trial_phase` (str, optional, e.g. "Phase II"), `therapeutic_area` (str, optional, e.g. "Oncology").
 
 ## Outputs
 You must return your findings using the predefined structured output schema for the Trial Data Analyst.

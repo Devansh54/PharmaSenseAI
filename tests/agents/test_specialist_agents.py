@@ -26,7 +26,8 @@ def test_ae_triage_agent_permissions():
 def test_compound_similarity_agent_permissions():
     agent = create_compound_similarity_agent(MagicMock(), MagicMock())
     assert "compound_similarity_tool" in agent.tools
-    assert len(agent.tools) == 1
+    assert "sql_query_tool" in agent.tools
+    assert len(agent.tools) == 2
 
 def test_report_writer_agent_permissions():
     agent = create_report_writer_agent(MagicMock(), MagicMock())
@@ -36,3 +37,9 @@ def test_report_writer_agent_permissions():
 def test_agents_system_instructions():
     agent = create_ae_triage_agent(MagicMock(), MagicMock())
     assert "Adverse Event Triage" in agent.system_instruction
+
+def test_trial_data_analyst_q3_query_instructions():
+    agent = create_trial_data_analyst(MagicMock(), MagicMock())
+    # Ensure instructions route site-level questions to the new query
+    assert "sites_by_trial_attributes" in agent.system_instruction
+    assert "site name" in agent.system_instruction.lower() or "site-level" in agent.system_instruction.lower()

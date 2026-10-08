@@ -12,7 +12,9 @@ ValidQueryId = Literal[
     "lab_results_summary",
     "compound_info",
     "adverse_events_by_trial",
-    "trial_enrollment_stats"
+    "trial_enrollment_stats",
+    "sites_by_trial_attributes",
+    "all_compounds"
 ]
 
 class SqlQueryInput(BaseModel):
@@ -47,6 +49,15 @@ QUERY_CATALOG = {
           AND (:therapeutic_area IS NULL OR t.therapeutic_area = :therapeutic_area)
         GROUP BY t.trial_id, t.trial_phase, t.therapeutic_area, t.status, t.target_enrollment
     """),
+    "sites_by_trial_attributes": text("""
+        SELECT s.trial_id, s.site_name, s.country, s.enrollment_count, s.site_status, t.trial_phase, t.therapeutic_area
+        FROM trial_sites s
+        JOIN clinical_trials t ON s.trial_id = t.trial_id
+        WHERE (:trial_phase IS NULL OR t.trial_phase = :trial_phase)
+          AND (:therapeutic_area IS NULL OR t.therapeutic_area = :therapeutic_area)
+        ORDER BY s.enrollment_count DESC
+    """),
+    "all_compounds": text("SELECT compound_id, compound_name, chemical_class, target_protein, discovery_phase FROM compounds"),
 }
 
 def sql_query_tool(session: Session, input_data: SqlQueryInput) -> SqlQueryOutput:
