@@ -71,4 +71,5 @@ def create_compound_similarity_agent(session: Session, llm: LLMProvider) -> Base
             "sql_query_tool": sql_query_tool
         },
         output_model=CompoundSimilarityAgentOutput,
+        max_iterations=4
     )

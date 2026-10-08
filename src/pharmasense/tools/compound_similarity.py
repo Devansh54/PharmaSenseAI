@@ -10,6 +10,7 @@ class CompoundSimilarityInput(BaseModel):
     compound_2_attrs: Dict[str, Any]
 
 class CompoundSimilarityOutput(BaseModel):
+    compared_compounds: List[str]
     overall_score: float
     coverage: float
     per_feature_contribution: Dict[str, float]
@@ -20,6 +21,10 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
     """Calculate attribute-based similarity (not molecular structure)."""
     attrs_1 = input_data.compound_1_attrs
     attrs_2 = input_data.compound_2_attrs
+    
+    comp_1_id = attrs_1.get("compound_id", "Unknown")
+    comp_2_id = attrs_2.get("compound_id", "Unknown")
+    compared_ids = [comp_1_id, comp_2_id]
 
     baseline_features = {
         "chemical_class",
@@ -34,6 +39,7 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
     
     if not all_keys:
         return CompoundSimilarityOutput(
+            compared_compounds=compared_ids,
             overall_score=0.0,
             coverage=0.0,
             per_feature_contribution={},
@@ -72,6 +78,7 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
     overall = sum(contributions.values()) / valid_features if valid_features > 0 else 0.0
 
     return CompoundSimilarityOutput(
+        compared_compounds=compared_ids,
         overall_score=round(overall, 3),
         coverage=round(coverage, 3),
         per_feature_contribution={k: round(v, 3) for k, v in contributions.items()},

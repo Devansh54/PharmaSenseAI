@@ -97,8 +97,10 @@ def try_deterministic_route(prompt: str) -> Plan | None:
     # Fast path only for unambiguous single matches
     if len(matches) == 1:
         selected = list(matches)[0]
+        # Compound Similarity and AE Triage require multiple sequential tools
+        w_type = "sequential" if selected in ("Compound Similarity", "Adverse Event Triage") else "single"
         return Plan(
-            workflow_type="single",
+            workflow_type=w_type,
             selected_specialists=[selected],
             task_descriptions={selected: prompt},
             resolved_entities={}
