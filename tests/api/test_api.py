@@ -347,3 +347,22 @@ def test_escalation_persistence_integration():
         # 3. missing review ID returns not-found
         miss_resp = client.get("/v1/reviews/MISSING-1234")
         assert miss_resp.status_code == 404
+
+def test_api_uses_eval_db_for_ae_triage(monkeypatch):
+    """Prove the API uses EVAL_DATABASE_URL when set and can see seeded TRL-0034 records."""
+    from pharmasense.api.main import get_db_session
+    from pharmasense.tools.sql_query import sql_query_tool, SqlQueryInput
+    
+    monkeypatch.setenv("EVAL_DATABASE_URL", "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense_test")
+    
+    session_gen = get_db_session()
+    session = next(session_gen)
+    
+    try:
+        req = SqlQueryInput(query_id="adverse_events_by_trial", parameters={"trial_id": "TRL-0034"})
+        out = sql_query_tool(session, req)
+        
+        # Verify that the seeded records from the eval DB are found
+        assert len(out.results) == 6
+    finally:
+        session.close()

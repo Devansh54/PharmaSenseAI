@@ -24,7 +24,8 @@ app = FastAPI(title="PharmaSense AI API")
 
 # Dependency for DB Session
 def get_db_session():
-    engine = create_engine(DATABASE_URL)
+    db_url = os.environ.get("EVAL_DATABASE_URL", DATABASE_URL)
+    engine = create_engine(db_url)
     with Session(engine) as session:
         yield session
 
