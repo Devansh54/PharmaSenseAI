@@ -50,8 +50,23 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             resolved_entities={}
         )
 
-    # 4. Multi-agent "full picture"
-    if re.search(r'\b(full picture|overall profile|compound investigation|summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower):
+    # 3.5. Trial + Research combined only (e.g. Q9)
+    if re.search(r'\b(summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower) and not re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower):
+        return Plan(
+            workflow_type="parallel",
+            selected_specialists=[
+                "Trial Data Analyst",
+                "Literature Research"
+            ],
+            task_descriptions={
+                "Trial Data Analyst": prompt,
+                "Literature Research": prompt
+            },
+            resolved_entities={}
+        )
+
+    # 4. Multi-agent "full picture" (4-agent deep dive)
+    if re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower) or (re.search(r'\b(summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower) and re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower)):
         return Plan(
             workflow_type="parallel",
             selected_specialists=[
