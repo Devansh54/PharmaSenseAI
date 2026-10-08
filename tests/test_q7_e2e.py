@@ -32,41 +32,21 @@ class MockLLM(LLMProvider):
         if "You are the Compound Similarity specialist." in messages_text and self.call_count == 2:
             from pharmasense.llm.contracts import ToolCall
             return LLMResponse(
-                content="I need to fetch compound info.",
+                content="I will find similar compounds.",
                 tool_calls=[
                     ToolCall(
                         id="call_1",
-                        name="sql_query_tool",
-                        arguments={"query_id": "compound_info", "parameters": {"compound_id": "CMP-0001"}}
-                    ),
-                    ToolCall(
-                        id="call_2",
-                        name="sql_query_tool",
-                        arguments={"query_id": "compound_info", "parameters": {"compound_id": "CMP-0133"}}
-                    )
-                ]
-            )
-
-        # 3. Mock Compound Similarity Agent - iteration 2
-        if "You are the Compound Similarity specialist." in messages_text and self.call_count == 3:
-            from pharmasense.llm.contracts import ToolCall
-            # Now we call the similarity tool
-            return LLMResponse(
-                content="I will compare them.",
-                tool_calls=[
-                    ToolCall(
-                        id="call_3",
                         name="compound_similarity_tool",
                         arguments={
-                            "compound_1_attrs": {"compound_id": "CMP-0001", "chemical_class": "Peptide", "target_protein": "JAK2", "therapeutic_area": "Neurology", "molecular_weight_da": 1387.41, "solubility_mg_ml": 3.292, "toxicity_score": 0.085},
-                            "compound_2_attrs": {"compound_id": "CMP-0133", "chemical_class": "Peptide", "target_protein": "JAK2", "therapeutic_area": "Infectious Disease", "molecular_weight_da": 1342.67, "solubility_mg_ml": 0.086, "toxicity_score": 0.223}
+                            "target_compound_id": "CMP-0001",
+                            "top_k": 5
                         }
                     )
                 ]
             )
-            
-        # 4. Mock Compound Similarity Agent - iteration 3 (finalizing output)
-        if "You are the Compound Similarity specialist." in messages_text and self.call_count == 4:
+
+        # 3. Mock Compound Similarity Agent - iteration 2 (finalizing output)
+        if "You are the Compound Similarity specialist." in messages_text and self.call_count == 3:
             return LLMResponse(
                 content="",
                 tool_calls=[],

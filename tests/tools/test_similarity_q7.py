@@ -13,37 +13,18 @@ def test_q7_similarity_offline():
         vlx_input = SqlQueryInput(query_id="compound_info", parameters={"compound_id": "CMP-0001"})
         vlx_out = sql_query_tool(session, vlx_input)
         assert not vlx_out.error
-        vlx_attrs = vlx_out.results[0]
         
-        # Get all compounds
-        all_input = SqlQueryInput(query_id="all_compounds", parameters={})
-        all_out = sql_query_tool(session, all_input)
-        assert not all_out.error
+        sim_input = CompoundSimilarityInput(
+            target_compound_id="CMP-0001",
+            top_k=5
+        )
+        sim_out = compound_similarity_tool(session, sim_input)
         
-        candidates = []
-        for c in all_out.results:
-            if c["compound_id"] == "CMP-0001":
-                continue
-            
-            sim_input = CompoundSimilarityInput(
-                compound_1_attrs=vlx_attrs,
-                compound_2_attrs=c
-            )
-            sim_out = compound_similarity_tool(sim_input)
-            
-            if sim_out.overall_score > 0.0: # Even minor similarity
-                candidates.append((c["compound_id"], sim_out.overall_score, sim_out.coverage))
-                
-        # Sort candidates by score
-        candidates.sort(key=lambda x: x[1], reverse=True)
+        assert len(sim_out.top_candidates) > 0, "No similarity candidates found, but expected some!"
         
-        # Verify that we actually found candidates
-        assert len(candidates) > 0, "No similarity candidates found, but expected some!"
-        
-        # The best candidate should have a reasonable score
-        best = candidates[0]
-        assert best[1] > 0.5, f"Best candidate score too low: {best[1]}"
-        assert best[2] == 1.0, f"Coverage should be 1.0, got {best[2]}"
+        best = sim_out.top_candidates[0]
+        assert best.overall_score > 0.5, f"Best candidate score too low: {best.overall_score}"
+        assert best.coverage == 1.0, f"Coverage should be 1.0, got {best.coverage}"
 
 if __name__ == "__main__":
     test_q7_similarity_offline()

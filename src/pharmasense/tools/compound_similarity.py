@@ -5,23 +5,26 @@ from typing import Dict, Any, List
 from pydantic import BaseModel
 from decimal import Decimal
 
-class CompoundSimilarityInput(BaseModel):
-    compound_1_attrs: Dict[str, Any]
-    compound_2_attrs: Dict[str, Any]
+from sqlalchemy.orm import Session
+from pharmasense.tools.sql_query import sql_query_tool, SqlQueryInput
 
-class CompoundSimilarityOutput(BaseModel):
+class CompoundSimilarityInput(BaseModel):
+    target_compound_id: str
+    top_k: int = 5
+
+class CandidateSimilarity(BaseModel):
     compared_compounds: List[str]
     overall_score: float
     coverage: float
     per_feature_contribution: Dict[str, float]
+
+class CompoundSimilarityOutput(BaseModel):
+    target_compound_id: str
+    top_candidates: List[CandidateSimilarity]
     limitations: List[str]
     profile_version: str
 
-def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSimilarityOutput:
-    """Calculate attribute-based similarity (not molecular structure)."""
-    attrs_1 = input_data.compound_1_attrs
-    attrs_2 = input_data.compound_2_attrs
-    
+def _compute_similarity(attrs_1: Dict[str, Any], attrs_2: Dict[str, Any]) -> CandidateSimilarity:
     comp_1_id = attrs_1.get("compound_id", "Unknown")
     comp_2_id = attrs_2.get("compound_id", "Unknown")
     compared_ids = [comp_1_id, comp_2_id]
@@ -38,13 +41,11 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
     all_keys = set(attrs_1.keys()).union(set(attrs_2.keys())).intersection(baseline_features)
     
     if not all_keys:
-        return CompoundSimilarityOutput(
+        return CandidateSimilarity(
             compared_compounds=compared_ids,
             overall_score=0.0,
             coverage=0.0,
-            per_feature_contribution={},
-            limitations=["No attributes provided for comparison."],
-            profile_version="v1"
+            per_feature_contribution={}
         )
 
     contributions = {}
@@ -77,11 +78,58 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
     coverage = valid_features / len(all_keys)
     overall = sum(contributions.values()) / valid_features if valid_features > 0 else 0.0
 
-    return CompoundSimilarityOutput(
+    return CandidateSimilarity(
         compared_compounds=compared_ids,
         overall_score=round(overall, 3),
         coverage=round(coverage, 3),
-        per_feature_contribution={k: round(v, 3) for k, v in contributions.items()},
+        per_feature_contribution={k: round(v, 3) for k, v in contributions.items()}
+    )
+
+def compound_similarity_tool(session: Session, input_data: CompoundSimilarityInput) -> CompoundSimilarityOutput:
+    """Calculate attribute-based similarity and rank top candidates (not molecular structure)."""
+    target_id = input_data.target_compound_id
+    
+    target_input = SqlQueryInput(query_id="compound_info", parameters={"compound_id": target_id})
+    target_out = sql_query_tool(session, target_input)
+    
+    if target_out.error or not target_out.results:
+        return CompoundSimilarityOutput(
+            target_compound_id=target_id,
+            top_candidates=[],
+            limitations=["Target compound not found."],
+            profile_version="v1"
+        )
+        
+    target_attrs = target_out.results[0]
+    
+    all_input = SqlQueryInput(query_id="all_compounds", parameters={})
+    all_out = sql_query_tool(session, all_input)
+    
+    if all_out.error or not all_out.results:
+        return CompoundSimilarityOutput(
+            target_compound_id=target_id,
+            top_candidates=[],
+            limitations=["No candidates found in database."],
+            profile_version="v1"
+        )
+        
+    candidates = []
+    for candidate_attrs in all_out.results:
+        if candidate_attrs.get("compound_id") == target_id:
+            continue
+            
+        sim = _compute_similarity(target_attrs, candidate_attrs)
+        if sim.overall_score > 0.0:
+            candidates.append(sim)
+            
+    # Sort descending by score
+    candidates.sort(key=lambda x: x.overall_score, reverse=True)
+    
+    top_candidates = candidates[:input_data.top_k]
+    
+    return CompoundSimilarityOutput(
+        target_compound_id=target_id,
+        top_candidates=top_candidates,
         limitations=[
             "Similarity is attribute-based only.",
             "Does NOT imply molecular structural similarity.",
