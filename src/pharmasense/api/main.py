@@ -134,6 +134,8 @@ async def create_analysis(
             if isinstance(tool_res, dict) and "task_id" in tool_res:
                 escalation_reference = tool_res["task_id"]
                 break
+                
+    db.commit()
     
     return AnalysisResponse(
         status=status_str,

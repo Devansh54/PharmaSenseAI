@@ -300,3 +300,50 @@ def test_analysis_escalation_reference_null():
         assert response.status_code == 200
         data = response.json()
         assert data["escalation_reference"] is None
+
+def test_escalation_persistence_integration():
+    from pharmasense.tools.escalation import escalation_notifier_tool, EscalationInput
+    
+    # We create a mock graph that actually uses the session to call the tool,
+    # mimicking what happens in reality, to test if db.commit() in the API route works.
+    class IntegrationMockGraph:
+        def __init__(self, db_session):
+            self.db_session = db_session
+            
+        def invoke(self, inputs):
+            out = escalation_notifier_tool(self.db_session, EscalationInput(event_id="EV-INTEG", reason="Integ test"))
+            return {
+                "final_report": {"report_content": "Done", "citations_resolved": [], "limitations_noted": []},
+                "specialist_results": {},
+                "actual_tools": [{
+                    "tool_name": "escalation_notifier_tool",
+                    "arguments": {},
+                    "result": out.model_dump()
+                }],
+                "errors": []
+            }
+            
+    # Need to override build_orchestration_graph to receive the db session
+    def mock_build_graph(db, gateway):
+        return IntegrationMockGraph(db)
+        
+    with patch("pharmasense.api.main.build_orchestration_graph", side_effect=mock_build_graph):
+        post_resp = client.post("/v1/analyses", json={"user_prompt": "Triage TRL-INTEG"})
+        assert post_resp.status_code == 200
+        ref_id = post_resp.json()["escalation_reference"]
+        assert ref_id is not None
+        
+        # 1. persisted review task is returned by GET /v1/reviews
+        list_resp = client.get("/v1/reviews")
+        assert list_resp.status_code == 200
+        tasks = list_resp.json()
+        assert any(t["task_id"] == ref_id for t in tasks)
+        
+        # 2. same review task retrievable via GET /v1/reviews/{review_id}
+        get_resp = client.get(f"/v1/reviews/{ref_id}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["task_id"] == ref_id
+        
+        # 3. missing review ID returns not-found
+        miss_resp = client.get("/v1/reviews/MISSING-1234")
+        assert miss_resp.status_code == 404
