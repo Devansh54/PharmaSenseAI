@@ -55,3 +55,30 @@ def test_planner_exceeds_branches():
     # Either unauthorized (Extra) or exceeded 4
     # The unauthorized check runs first
     assert "Unauthorized specialist: Extra" in res["errors"]
+
+def test_planner_deterministic_q1():
+    llm = MockLLM({})
+    planner = PlannerNode(llm)
+    state = WorkflowState(request_id="1", user_prompt="Which Phase II oncology trials are below 60% enrollment right now?", plan=None, specialist_results={}, final_report=None, errors=[])
+    
+    res = planner(state)
+    assert "errors" not in res
+    plan = res["plan"]
+    assert plan.workflow_type == "single"
+    assert plan.selected_specialists == ["Trial Data Analyst"]
+    assert "trial_enrollment_stats" in plan.task_descriptions["Trial Data Analyst"]
+
+def test_planner_deterministic_q3():
+    llm = MockLLM({})
+    planner = PlannerNode(llm)
+    state = WorkflowState(request_id="1", user_prompt="What sites are associated with Phase II oncology trials, and how many participants have been enrolled at those sites?", plan=None, specialist_results={}, final_report=None, errors=[])
+    
+    res = planner(state)
+    assert "errors" not in res
+    plan = res["plan"]
+    assert plan.workflow_type == "single"
+    assert plan.selected_specialists == ["Trial Data Analyst"]
+    assert "sites_by_trial_attributes" in plan.task_descriptions["Trial Data Analyst"]
+    assert "trial_enrollment_stats" in plan.task_descriptions["Trial Data Analyst"] # Wait, the instruction says "Do NOT use trial_enrollment_stats", so the string is present!
+    # Let's check for the exact instruction instead.
+    assert "MUST use the `sites_by_trial_attributes`" in plan.task_descriptions["Trial Data Analyst"]

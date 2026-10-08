@@ -22,6 +22,22 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             resolved_entities={}
         )
 
+    # Specific map for site-level details (e.g., Q3)
+    if re.search(r'\b(site|sites)\b', prompt_lower) and "trials" in prompt_lower:
+        return Plan(
+            workflow_type="single",
+            selected_specialists=["Trial Data Analyst"],
+            task_descriptions={
+                "Trial Data Analyst": (
+                    f"User Prompt: {prompt}\n\n"
+                    "INSTRUCTION: You MUST use the `sites_by_trial_attributes` query_id to answer this question. "
+                    "Do NOT use `trial_enrollment_stats` or any other query. "
+                    "Extract the required parameters (e.g., trial_phase, therapeutic_area) from the prompt."
+                )
+            },
+            resolved_entities={}
+        )
+
     # Multi-agent "full picture"
     if any(p in prompt_lower for p in ["full picture", "overall profile", "compound investigation"]):
         return Plan(
