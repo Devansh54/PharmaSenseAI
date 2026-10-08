@@ -66,7 +66,6 @@ def test_planner_deterministic_q1():
     plan = res["plan"]
     assert plan.workflow_type == "single"
     assert plan.selected_specialists == ["Trial Data Analyst"]
-    assert "trial_enrollment_stats" in plan.task_descriptions["Trial Data Analyst"]
 
 def test_planner_deterministic_q3():
     llm = MockLLM({})
@@ -79,6 +78,5 @@ def test_planner_deterministic_q3():
     assert plan.workflow_type == "single"
     assert plan.selected_specialists == ["Trial Data Analyst"]
     assert "sites_by_trial_attributes" in plan.task_descriptions["Trial Data Analyst"]
-    assert "trial_enrollment_stats" in plan.task_descriptions["Trial Data Analyst"] # Wait, the instruction says "Do NOT use trial_enrollment_stats", so the string is present!
     # Let's check for the exact instruction instead.
     assert "MUST use the `sites_by_trial_attributes`" in plan.task_descriptions["Trial Data Analyst"]

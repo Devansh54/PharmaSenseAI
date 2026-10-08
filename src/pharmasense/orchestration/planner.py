@@ -43,7 +43,7 @@ def try_deterministic_route(prompt: str) -> Plan | None:
                 "Trial Data Analyst": (
                     f"User Prompt: {prompt}\n\n"
                     "INSTRUCTION: You MUST use the `sites_by_trial_attributes` query_id to answer this question. "
-                    "Do NOT use `trial_enrollment_stats` or any other query. "
+                    "Do NOT use any other query. "
                     "Extract the required parameters (e.g., trial_phase, therapeutic_area) from the prompt."
                 )
             },
