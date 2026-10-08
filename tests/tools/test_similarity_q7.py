@@ -9,13 +9,8 @@ def test_q7_similarity_offline():
     db_url = os.environ.get("EVAL_DATABASE_URL", DATABASE_URL)
     engine = create_engine(db_url)
     with Session(engine) as session:
-        # Get VLX-1000 (CMP-0001) info
-        vlx_input = SqlQueryInput(query_id="compound_info", parameters={"compound_id": "CMP-0001"})
-        vlx_out = sql_query_tool(session, vlx_input)
-        assert not vlx_out.error
-        
         sim_input = CompoundSimilarityInput(
-            target_compound_id="CMP-0001",
+            target_compound_id="VLX-1000",
             top_k=5
         )
         sim_out = compound_similarity_tool(session, sim_input)

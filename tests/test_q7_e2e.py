@@ -15,6 +15,14 @@ class MockLLM(LLMProvider):
         self.call_count += 1
         messages_text = str(request.messages)
         
+        # Verify prompt size stays bounded
+        import json
+        import dataclasses
+        req_dict = dataclasses.asdict(request) if dataclasses.is_dataclass(request) else (request.dict() if hasattr(request, 'dict') else vars(request))
+        req_str = json.dumps(req_dict, default=str)
+        # Roughly 4 chars per token, so 5000 tokens is ~20000 chars. We assert < 15000 to be very safe.
+        assert len(req_str) < 15000, f"Prompt bloat detected! Size: {len(req_str)} chars"
+        
         # 1. Mock Planner
         if "You are the Router/Planner." in messages_text:
             return LLMResponse(
@@ -38,7 +46,7 @@ class MockLLM(LLMProvider):
                         id="call_1",
                         name="compound_similarity_tool",
                         arguments={
-                            "target_compound_id": "CMP-0001",
+                            "target_compound_id": "VLX-1000",
                             "top_k": 5
                         }
                     )

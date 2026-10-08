@@ -67,15 +67,13 @@ class CompoundSimilarityAgent(BaseAgent):
 
 def create_compound_similarity_agent(session: Session, llm: LLMProvider) -> BaseAgent:
     instruction_path = Path("agent_specs/compound_similarity/instructions.md")
-    from pharmasense.tools.sql_query import sql_query_tool
     return CompoundSimilarityAgent(
         session=session,
         llm=llm,
         system_instruction=instruction_path.read_text(encoding="utf-8"),
         tools={
-            "compound_similarity_tool": compound_similarity_tool,
-            "sql_query_tool": sql_query_tool
+            "compound_similarity_tool": compound_similarity_tool
         },
         output_model=CompoundSimilarityAgentOutput,
-        max_iterations=4
+        max_iterations=3
     )

@@ -89,19 +89,6 @@ def compound_similarity_tool(session: Session, input_data: CompoundSimilarityInp
     """Calculate attribute-based similarity and rank top candidates (not molecular structure)."""
     target_id = input_data.target_compound_id
     
-    target_input = SqlQueryInput(query_id="compound_info", parameters={"compound_id": target_id})
-    target_out = sql_query_tool(session, target_input)
-    
-    if target_out.error or not target_out.results:
-        return CompoundSimilarityOutput(
-            target_compound_id=target_id,
-            top_candidates=[],
-            limitations=["Target compound not found."],
-            profile_version="v1"
-        )
-        
-    target_attrs = target_out.results[0]
-    
     all_input = SqlQueryInput(query_id="all_compounds", parameters={})
     all_out = sql_query_tool(session, all_input)
     
@@ -110,6 +97,23 @@ def compound_similarity_tool(session: Session, input_data: CompoundSimilarityInp
             target_compound_id=target_id,
             top_candidates=[],
             limitations=["No candidates found in database."],
+            profile_version="v1"
+        )
+        
+    target_attrs = None
+    # Find by ID or Name
+    for c in all_out.results:
+        if c.get("compound_id") == target_id or c.get("compound_name") == target_id:
+            target_attrs = c
+            # Update target_id to the canonical ID
+            target_id = c.get("compound_id")
+            break
+            
+    if not target_attrs:
+        return CompoundSimilarityOutput(
+            target_compound_id=target_id,
+            top_candidates=[],
+            limitations=["Target compound not found."],
             profile_version="v1"
         )
         

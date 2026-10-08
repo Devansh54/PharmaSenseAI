@@ -137,7 +137,22 @@ class BaseAgent:
             # 5. Execute each tool and append results
             for call in res.tool_calls:
                 if call.name not in self.tools:
-                    raise RuntimeError(f"Agent attempted to call unauthorized tool: {call.name}")
+                    result_raw = {"error": f"Agent attempted to call unauthorized tool: {call.name}. Use only the tools explicitly provided."}
+                    self.executed_tools.append({
+                        "tool_name": call.name,
+                        "arguments": call.arguments,
+                        "result": result_raw
+                    })
+                    compacted_str = compact_tool_result(result_raw)
+                    messages.append(
+                        Message(
+                            role="tool",
+                            content=compacted_str,
+                            tool_call_id=call.id,
+                            name=call.name,
+                        )
+                    )
+                    continue
 
                 tool_func = self.tools[call.name]
                 sig = inspect.signature(tool_func)

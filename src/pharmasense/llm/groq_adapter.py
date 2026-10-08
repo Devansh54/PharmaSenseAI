@@ -63,14 +63,22 @@ def _to_groq_messages(messages: List[Message]) -> List[Dict[str, Any]]:
         if m.name:
             entry["name"] = m.name
         if m.tool_calls:
-            entry["tool_calls"] = [
-                {
+            calls_list = []
+            for tc in m.tool_calls:
+                # If we failed to parse arguments earlier (e.g., model returned invalid JSON)
+                # do not send invalid JSON back to Groq in the history, as Groq validates
+                # history strictly and will return HTTP 422. Use empty dict as fallback.
+                if "_raw" in tc.arguments:
+                    args_str = "{}"
+                else:
+                    args_str = json.dumps(tc.arguments)
+                    
+                calls_list.append({
                     "id": tc.id,
                     "type": "function",
-                    "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}
-                }
-                for tc in m.tool_calls
-            ]
+                    "function": {"name": tc.name, "arguments": args_str}
+                })
+            entry["tool_calls"] = calls_list
         payload.append(entry)
     return payload
 
