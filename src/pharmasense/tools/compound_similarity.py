@@ -3,6 +3,7 @@ Calculates attribute-based similarity for compounds.
 """
 from typing import Dict, Any, List
 from pydantic import BaseModel
+from decimal import Decimal
 
 class CompoundSimilarityInput(BaseModel):
     compound_1_attrs: Dict[str, Any]
@@ -20,7 +21,17 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
     attrs_1 = input_data.compound_1_attrs
     attrs_2 = input_data.compound_2_attrs
 
-    all_keys = set(attrs_1.keys()).union(set(attrs_2.keys()))
+    baseline_features = {
+        "chemical_class",
+        "therapeutic_area",
+        "target_protein",
+        "molecular_weight_da",
+        "solubility_mg_ml",
+        "toxicity_score"
+    }
+    
+    all_keys = set(attrs_1.keys()).union(set(attrs_2.keys())).intersection(baseline_features)
+    
     if not all_keys:
         return CompoundSimilarityOutput(
             overall_score=0.0,
@@ -46,12 +57,14 @@ def compound_similarity_tool(input_data: CompoundSimilarityInput) -> CompoundSim
         if isinstance(val1, str) and isinstance(val2, str):
             contributions[key] = 1.0 if val1.lower() == val2.lower() else 0.0
         # Numeric distance
-        elif isinstance(val1, (int, float)) and isinstance(val2, (int, float)):
-            max_val = max(abs(val1), abs(val2))
+        elif isinstance(val1, (int, float, Decimal)) and isinstance(val2, (int, float, Decimal)):
+            v1_float = float(val1)
+            v2_float = float(val2)
+            max_val = max(abs(v1_float), abs(v2_float))
             if max_val == 0:
                 contributions[key] = 1.0
             else:
-                contributions[key] = 1.0 - (abs(val1 - val2) / max_val)
+                contributions[key] = 1.0 - (abs(v1_float - v2_float) / max_val)
         else:
             contributions[key] = 0.0 # Unsupported type
 

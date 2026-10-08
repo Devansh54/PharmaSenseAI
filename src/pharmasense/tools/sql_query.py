@@ -32,7 +32,7 @@ QUERY_CATALOG = {
     "trial_summary": text("SELECT trial_id, trial_phase, therapeutic_area, status, target_enrollment FROM clinical_trials WHERE trial_id = :trial_id"),
     "site_enrollment": text("SELECT site_name, country, enrollment_count, site_status FROM trial_sites WHERE trial_id = :trial_id ORDER BY enrollment_count DESC"),
     "lab_results_summary": text("SELECT experiment_type, result_value, unit, pass_fail FROM lab_results WHERE compound_id = :compound_id ORDER BY result_date DESC"),
-    "compound_info": text("SELECT compound_name, chemical_class, target_protein, discovery_phase FROM compounds WHERE compound_id = :compound_id"),
+    "compound_info": text("SELECT compound_id, compound_name, chemical_class, therapeutic_area, target_protein, discovery_phase, molecular_weight_da, solubility_mg_ml, toxicity_score FROM compounds WHERE compound_id = :compound_id"),
     "adverse_events_by_trial": text("SELECT event_id, event_date, adverse_event_term, severity, seriousness, outcome FROM adverse_events WHERE trial_id = :trial_id"),
     "trial_enrollment_stats": text("""
         SELECT
@@ -57,7 +57,7 @@ QUERY_CATALOG = {
           AND (:therapeutic_area IS NULL OR t.therapeutic_area = :therapeutic_area)
         ORDER BY s.enrollment_count DESC
     """),
-    "all_compounds": text("SELECT compound_id, compound_name, chemical_class, target_protein, discovery_phase FROM compounds"),
+    "all_compounds": text("SELECT compound_id, compound_name, chemical_class, therapeutic_area, target_protein, discovery_phase, molecular_weight_da, solubility_mg_ml, toxicity_score FROM compounds"),
 }
 
 def sql_query_tool(session: Session, input_data: SqlQueryInput) -> SqlQueryOutput:
