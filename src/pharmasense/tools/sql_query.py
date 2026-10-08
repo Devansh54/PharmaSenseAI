@@ -31,7 +31,7 @@ class SqlQueryOutput(BaseModel):
 QUERY_CATALOG = {
     "trial_summary": text("SELECT trial_id, trial_phase, therapeutic_area, status, target_enrollment FROM clinical_trials WHERE trial_id = :trial_id"),
     "site_enrollment": text("SELECT site_name, country, enrollment_count, site_status FROM trial_sites WHERE trial_id = :trial_id ORDER BY enrollment_count DESC"),
-    "lab_results_summary": text("SELECT experiment_type, result_value, unit, pass_fail FROM lab_results WHERE compound_id = :compound_id ORDER BY result_date DESC"),
+    "lab_results_summary": text("SELECT r.experiment_type, r.result_value, r.unit, r.pass_fail FROM lab_results r JOIN compounds c ON r.compound_id = c.compound_id WHERE c.compound_id = :compound_id OR c.compound_name = :compound_id ORDER BY r.result_date DESC"),
     "compound_info": text("SELECT compound_id, compound_name, chemical_class, therapeutic_area, target_protein, discovery_phase, molecular_weight_da, solubility_mg_ml, toxicity_score FROM compounds WHERE compound_id = :compound_id"),
     "adverse_events_by_trial": text("SELECT event_id, event_date, adverse_event_term, severity, seriousness, outcome FROM adverse_events WHERE trial_id = :trial_id"),
     "trial_enrollment_stats": text("""
