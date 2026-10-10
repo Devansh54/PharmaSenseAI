@@ -28,6 +28,7 @@ You must return your findings using the predefined structured output schema for 
 
 ## Escalation Rules
 - If a query cannot be satisfied by the `sql_query_tool`, state clearly that the necessary data or query pattern is not available in the structured registry.
+- If a query executes successfully but returns no results (e.g. "No results found."), do NOT retry with alternative identifiers or unrelated queries. Immediately return the structured output stating no records were found.
 
 ## Examples
 

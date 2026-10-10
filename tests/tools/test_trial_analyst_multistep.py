@@ -120,3 +120,42 @@ def test_agent_invalid_json_retry():
         
         assert llm.call_count == 2
         assert result.summary == "Fixed on retry"
+
+def test_trial_analyst_empty_result_handling():
+    class MockEmptyResultLLM:
+        def __init__(self):
+            self.call_count = 0
+            
+        def complete(self, request: LLMRequest) -> LLMResponse:
+            self.call_count += 1
+            
+            if self.call_count == 1:
+                tc = ToolCall(
+                    id="call_1",
+                    name="sql_query_tool",
+                    arguments={"query_id": "trials_by_compound", "parameters": {"compound_id": "ZXQ-9999"}}
+                )
+                return LLMResponse(content="", tool_calls=[tc], parsed=None, provider_metadata={})
+            elif self.call_count == 2:
+                # To simulate the fix, the LLM should output the final response on iteration 2 instead of calling again.
+                from pharmasense.agents.trial import TrialDataAnalystOutput
+                return LLMResponse(
+                    content="",
+                    tool_calls=[],
+                    parsed=TrialDataAnalystOutput(summary="No matching structured records found.", limitations=["No results found for ZXQ-9999."]),
+                    provider_metadata={}
+                )
+            
+            raise RuntimeError("Agent looped instead of returning structured output")
+
+    db_url = os.environ.get("EVAL_DATABASE_URL", "sqlite://")
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        llm = MockEmptyResultLLM()
+        agent = create_trial_data_analyst(session, llm)
+        result, tools = agent.run("Find trials for ZXQ-9999.")
+        
+        assert llm.call_count == 2
+        assert "No matching structured records" in result.summary
+        assert len(tools) == 1
+        assert tools[0]["tool_name"] == "sql_query_tool"
