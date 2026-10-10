@@ -39,23 +39,43 @@ class MockDefectiveLiteratureLLM(LLMProvider):
             
         raise RuntimeError("Agent looped instead of coercing types")
 
-def test_literature_search_handoff_and_coercion():
+def test_literature_search_empty_termination():
     engine = create_engine('sqlite://')
     with Session(engine) as session:
         llm = MockDefectiveLiteratureLLM()
         gateway = LLMGateway(llm)
         agent = create_literature_research_agent(session, gateway)
         
-        def mock_vs_tool(session, input_data: VectorSearchInput):
+        def mock_vs_tool_empty(session, input_data: VectorSearchInput):
             return VectorSearchOutput(chunks=[], index_version="mock")
             
-        agent.tools["vector_search_tool"] = mock_vs_tool
+        agent.tools["vector_search_tool"] = mock_vs_tool_empty
+        
+        res, tools = agent.run("Find research on ZXQ-9999.")
+        
+        assert llm.call_count == 1
+        assert isinstance(res, LiteratureResearchOutput)
+        assert res.no_evidence_found is True
+        assert res.citations == []
+        assert res.findings == "No relevant literature found."
+
+def test_literature_search_coercion():
+    engine = create_engine('sqlite://')
+    with Session(engine) as session:
+        llm = MockDefectiveLiteratureLLM()
+        gateway = LLMGateway(llm)
+        agent = create_literature_research_agent(session, gateway)
+        
+        def mock_vs_tool_non_empty(session, input_data: VectorSearchInput):
+            return VectorSearchOutput(chunks=[{"chunk_id": "valid_id", "doc_id": "doc_1", "title": "Test", "chunk_text": "text", "similarity_score": 0.9}], index_version="mock")
+            
+        agent.tools["vector_search_tool"] = mock_vs_tool_non_empty
         
         res, tools = agent.run("Find research on ZXQ-9999.")
         
         assert llm.call_count == 2
         assert isinstance(res, LiteratureResearchOutput)
-        assert res.no_evidence_found is True
-        # Hallucinated citations must be stripped to an empty list
+        assert res.no_evidence_found is True  # Based on the mocked LLM output
+        # Hallucinated citations must be stripped to an empty list because the LLM returns "invented_chunk_id" which is not "valid_id"
         assert res.citations == []
-        assert res.findings != "No relevant literature found or could not execute search."
+        assert res.findings == "No evidence."
