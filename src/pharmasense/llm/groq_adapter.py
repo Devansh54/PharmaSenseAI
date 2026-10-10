@@ -110,10 +110,22 @@ def _parse_tool_calls(message: Any) -> List[ToolCall]:
     raw_calls = getattr(message, "tool_calls", None) or []
     calls: List[ToolCall] = []
     for c in raw_calls:
-        try:
-            args = json.loads(c.function.arguments) if c.function.arguments else {}
-        except json.JSONDecodeError:
-            args = {"_raw": c.function.arguments}
+        if not c.function.arguments:
+            args = {}
+        else:
+            clean_args = c.function.arguments.strip()
+            if clean_args.startswith("```json"):
+                clean_args = clean_args[7:]
+            elif clean_args.startswith("```"):
+                clean_args = clean_args[3:]
+            if clean_args.endswith("```"):
+                clean_args = clean_args[:-3]
+            clean_args = clean_args.strip()
+            
+            try:
+                args = json.loads(clean_args) if clean_args else {}
+            except json.JSONDecodeError:
+                args = {"_raw": c.function.arguments}
         calls.append(ToolCall(id=c.id, name=c.function.name, arguments=args))
     return calls
 
