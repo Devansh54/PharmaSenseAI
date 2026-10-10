@@ -78,3 +78,44 @@ def test_provider_switching(monkeypatch):
     assert pharmasense.config.LLM_PROVIDER_NAME == "gemini"
     gateway_gemini = LLMGateway(GeminiAdapter())
     assert isinstance(gateway_gemini._provider, GeminiAdapter)
+
+def test_parse_tool_calls_markdown():
+    """Ensure _parse_tool_calls strips markdown blocks from tool arguments."""
+    from pharmasense.llm.groq_adapter import _parse_tool_calls
+    
+    class MockFunction:
+        def __init__(self, name, arguments):
+            self.name = name
+            self.arguments = arguments
+            
+    class MockToolCall:
+        def __init__(self, id, name, arguments):
+            self.id = id
+            self.function = MockFunction(name, arguments)
+            self.type = 'function'
+            
+    class MockMessage:
+        def __init__(self, tool_calls):
+            self.tool_calls = tool_calls
+            self.content = None
+            
+    # Markdown wrapped arguments
+    markdown_args = '```json\n{"summary": "Test", "limitations": []}\n```'
+    tc1 = MockToolCall('call_1', 'TrialDataAnalystOutput', markdown_args)
+    
+    # Normal JSON arguments
+    normal_args = '{"summary": "Normal", "limitations": []}'
+    tc2 = MockToolCall('call_2', 'TrialDataAnalystOutput', normal_args)
+    
+    msg = MockMessage(tool_calls=[tc1, tc2])
+    
+    parsed_calls = _parse_tool_calls(msg)
+    
+    assert len(parsed_calls) == 2
+    assert parsed_calls[0].id == 'call_1'
+    assert parsed_calls[0].name == 'TrialDataAnalystOutput'
+    assert parsed_calls[0].arguments == {"summary": "Test", "limitations": []}
+    
+    assert parsed_calls[1].id == 'call_2'
+    assert parsed_calls[1].name == 'TrialDataAnalystOutput'
+    assert parsed_calls[1].arguments == {"summary": "Normal", "limitations": []}
