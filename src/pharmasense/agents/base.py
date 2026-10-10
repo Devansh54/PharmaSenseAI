@@ -122,6 +122,15 @@ class BaseAgent:
                 if "Structured output parsing failed" in error_str or "Structured output is not valid JSON" in error_str or "Structured output failed schema validation" in error_str or "no valid parsed output" in error_str or "Finalization rejected" in error_str:
                     from pharmasense.llm.contracts import LLMInvalidOutputError
                     if isinstance(e, LLMInvalidOutputError) and getattr(e, "raw_content", None):
+                        import re
+                        match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", e.raw_content, re.DOTALL)
+                        if match:
+                            try:
+                                parsed_obj = self.output_model.model_validate_json(match.group(1))
+                                self.validate_finalization(parsed_obj, self.executed_tools)
+                                return parsed_obj, self.executed_tools
+                            except Exception:
+                                pass
                         messages.append(Message(role="assistant", content=e.raw_content))
                     messages.append(Message(role="user", content=f"Your previous response was invalid. Error: {error_str}. Please correct it and output strictly the requested JSON schema or tool call."))
                     continue
