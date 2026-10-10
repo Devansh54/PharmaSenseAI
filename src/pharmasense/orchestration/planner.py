@@ -34,6 +34,21 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             resolved_entities={}
         )
 
+    # 3.5. Trial + Research combined only (e.g. Q9)
+    if re.search(r'\b(summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower) and not re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower):
+        return Plan(
+            workflow_type="parallel",
+            selected_specialists=[
+                "Trial Data Analyst",
+                "Literature Research"
+            ],
+            task_descriptions={
+                "Trial Data Analyst": f"User Prompt: {prompt}\n\nINSTRUCTION: You MUST use the `trials_by_compound` query_id first to retrieve all clinical trials associated with the requested compound. If the user also asks for associated sites, you may subsequently use `site_enrollment` for the identified trials.",
+                "Literature Research": prompt
+            },
+            resolved_entities={}
+        )
+
     # 3. Specific map for site-level details (e.g., Q3)
     if re.search(r'\b(site|sites|site-level|clinical sites?)\b', prompt_lower) and re.search(r'\b(trials|studies)\b', prompt_lower):
         return Plan(
@@ -50,20 +65,6 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             resolved_entities={}
         )
 
-    # 3.5. Trial + Research combined only (e.g. Q9)
-    if re.search(r'\b(summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower) and not re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower):
-        return Plan(
-            workflow_type="parallel",
-            selected_specialists=[
-                "Trial Data Analyst",
-                "Literature Research"
-            ],
-            task_descriptions={
-                "Trial Data Analyst": f"User Prompt: {prompt}\n\nINSTRUCTION: You MUST use the `trials_by_compound` query_id to retrieve all clinical trials associated with the requested compound.",
-                "Literature Research": prompt
-            },
-            resolved_entities={}
-        )
 
     # 4. Multi-agent "full picture" (4-agent deep dive)
     if re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower) or (re.search(r'\b(summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower) and re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower)):
