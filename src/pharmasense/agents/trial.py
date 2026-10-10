@@ -67,4 +67,5 @@ def create_trial_data_analyst(session: Session, llm: LLMProvider, task_desc: str
         system_instruction=full_instruction,
         tools={"sql_query_tool": sql_query_tool},
         output_model=TrialDataAnalystOutput,
+        max_iterations=4,
     )
