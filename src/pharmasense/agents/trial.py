@@ -21,6 +21,24 @@ class TrialDataAnalystAgent(BaseAgent):
                 ), getattr(self, "executed_tools", [])
             raise
 
+    def check_early_termination(self) -> BaseModel | None:
+        if not hasattr(self, "executed_tools") or not self.executed_tools:
+            return None
+            
+        last_tool = self.executed_tools[-1]
+        if last_tool["tool_name"] == "sql_query_tool":
+            args = last_tool["arguments"]
+            res = last_tool["result"]
+            if args.get("query_id") == "trials_by_compound":
+                if not res.get("error") and res.get("results") is not None and len(res["results"]) == 0:
+                    params = args.get("parameters", {})
+                    compound = params.get("compound_id") or params.get("compound_name") or "the requested compound"
+                    return TrialDataAnalystOutput(
+                        summary="No matching structured records found.",
+                        limitations=[f"No results found for {compound}."]
+                    )
+        return None
+
 def create_trial_data_analyst(session: Session, llm: LLMProvider, task_desc: str = "") -> BaseAgent:
     instruction_path = Path("agent_specs/trial_data_analyst/instructions.md")
     full_instruction = instruction_path.read_text(encoding="utf-8")

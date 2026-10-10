@@ -221,6 +221,10 @@ class BaseAgent:
                         name=call.name,
                     )
                 )
+            if hasattr(self, "check_early_termination"):
+                early_result = self.check_early_termination()
+                if early_result:
+                    return early_result, self.executed_tools
 
             # Check if we should force finalization
             if single_tool_mode and self.executed_tools:
