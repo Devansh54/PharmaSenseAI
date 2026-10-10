@@ -48,7 +48,7 @@ Respond strictly with a JSON object:
     }
 
     req = LLMRequest(
-        model=get_default_model(),
+        model=None,
         messages=[Message(role="user", content=prompt)],
         response_schema=schema,
         temperature=0.0

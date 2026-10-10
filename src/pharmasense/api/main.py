@@ -12,7 +12,7 @@ from pharmasense.api.models import (
     EvidenceOut, ReviewDecisionIn, ReviewTaskOut, ReviewDecisionOut
 )
 from pharmasense.db.models import DocumentChunk, ReviewTask, ReviewDecision
-from pharmasense.config import DATABASE_URL, GroqAdapterConfig
+from pharmasense.config import DATABASE_URL, GroqAdapterConfig, GatewayConfig
 import os
 from pharmasense.llm.gateway import LLMGateway
 from pharmasense.llm.groq_adapter import GroqAdapter
@@ -30,9 +30,11 @@ def get_db_session():
         yield session
 
 def build_gateway():
-    config = GroqAdapterConfig()
+    model = os.environ.get("LLM_MODEL", os.environ.get("PHARMASENSE_LLM_MODEL", "qwen/qwen3.8-27b"))
+    config = GroqAdapterConfig(model=model)
     adapter = GroqAdapter(config=config)
-    return BudgetEnforcingGateway(inner=LLMGateway(adapter))
+    gateway_config = GatewayConfig(model=model)
+    return BudgetEnforcingGateway(inner=LLMGateway(adapter, config=gateway_config))
 
 @app.post("/v1/analyses", response_model=AnalysisResponse)
 async def create_analysis(
