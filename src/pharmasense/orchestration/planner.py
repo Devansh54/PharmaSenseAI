@@ -59,7 +59,7 @@ def try_deterministic_route(prompt: str) -> Plan | None:
                 "Literature Research"
             ],
             task_descriptions={
-                "Trial Data Analyst": prompt,
+                "Trial Data Analyst": f"User Prompt: {prompt}\n\nINSTRUCTION: You MUST use the `trials_by_compound` query_id to retrieve all clinical trials associated with the requested compound.",
                 "Literature Research": prompt
             },
             resolved_entities={}

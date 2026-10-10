@@ -14,7 +14,8 @@ ValidQueryId = Literal[
     "adverse_events_by_trial",
     "trial_enrollment_stats",
     "sites_by_trial_attributes",
-    "all_compounds"
+    "all_compounds",
+    "trials_by_compound"
 ]
 
 class SqlQueryInput(BaseModel):
@@ -29,6 +30,7 @@ class SqlQueryOutput(BaseModel):
 
 # Pre-approved queries
 QUERY_CATALOG = {
+    "trials_by_compound": text("SELECT t.trial_id, t.trial_phase, t.therapeutic_area, t.status, t.target_enrollment, t.primary_endpoint FROM clinical_trials t JOIN compounds c ON t.compound_id = c.compound_id WHERE c.compound_id = :compound_id OR c.compound_name = :compound_id"),
     "trial_summary": text("SELECT trial_id, trial_phase, therapeutic_area, status, target_enrollment FROM clinical_trials WHERE trial_id = :trial_id"),
     "site_enrollment": text("SELECT site_name, country, enrollment_count, site_status FROM trial_sites WHERE trial_id = :trial_id ORDER BY enrollment_count DESC"),
     "lab_results_summary": text("SELECT r.experiment_type, r.result_value, r.unit, r.pass_fail FROM lab_results r JOIN compounds c ON r.compound_id = c.compound_id WHERE c.compound_id = :compound_id OR c.compound_name = :compound_id ORDER BY r.result_date DESC"),

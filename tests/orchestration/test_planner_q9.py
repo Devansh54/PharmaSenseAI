@@ -7,6 +7,7 @@ def test_q9_deterministic_routing():
     assert plan is not None
     assert plan.workflow_type == "parallel"
     assert sorted(plan.selected_specialists) == sorted(["Trial Data Analyst", "Literature Research"])
+    assert "trials_by_compound" in plan.task_descriptions["Trial Data Analyst"]
 
 def test_full_picture_routing():
     prompt = "Give me the full picture on compound X, summarizing trial and research evidence"
