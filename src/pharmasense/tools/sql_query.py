@@ -71,7 +71,16 @@ def sql_query_tool(session: Session, input_data: SqlQueryInput) -> SqlQueryOutpu
 
     # Ensure all parameters used in the query are present in the dictionary (default to None)
     import re
-    bind_params = re.findall(r":([a-zA-Z0-9_]+)", str(query))
+    bind_params = set(re.findall(r":([a-zA-Z0-9_]+)", str(query)))
+
+    invalid_params = [p for p in input_data.parameters if p not in bind_params]
+    if invalid_params:
+        return SqlQueryOutput(
+            results=[],
+            columns=[],
+            error=f"Invalid parameters provided: {invalid_params}. Allowed parameters for this query are: {list(bind_params)}"
+        )
+
     safe_params = {p: None for p in bind_params}
     safe_params.update(input_data.parameters)
 

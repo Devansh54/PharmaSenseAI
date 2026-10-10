@@ -29,3 +29,13 @@ def test_trials_by_compound():
         assert out_id.error is None
         assert len(out_id.results) == 1
         assert out_id.results[0]["trial_id"] == "TRL-0001"
+
+        # 3. Query with invalid parameter (should return descriptive error)
+        input_invalid = SqlQueryInput(
+            query_id="trials_by_compound",
+            parameters={"compound_name": "DKU-1001"}
+        )
+        out_invalid = sql_query_tool(session, input_invalid)
+
+        assert out_invalid.error is not None
+        assert "Invalid parameters provided: ['compound_name']" in out_invalid.error
