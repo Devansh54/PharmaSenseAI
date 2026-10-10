@@ -210,8 +210,17 @@ def test_status_required_behavior_failed():
     state = {
         "final_report": {"report_content": "ok"},
         "specialist_results": {
-            "A": {"limitations": ["Agent exceeded max iterations"]},
-            "B": {"findings": "could not execute search"}
+            "A": {
+                "limitations": [
+                    "Agent exceeded max iterations before producing valid output."
+                ]
+            },
+            "B": {
+                "findings": "Search execution failed.",
+                "limitations": [
+                    "Agent exceeded max iterations before producing valid output."
+                ]
+            }
         }
     }
     with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
