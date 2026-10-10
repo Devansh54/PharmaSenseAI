@@ -119,7 +119,7 @@ class BaseAgent:
 
             except (LLMGatewayError, RuntimeError, ValueError) as e:
                 error_str = str(e)
-                if "Structured output parsing failed" in error_str or "no valid parsed output" in error_str or "Finalization rejected" in error_str:
+                if "Structured output parsing failed" in error_str or "Structured output is not valid JSON" in error_str or "Structured output failed schema validation" in error_str or "no valid parsed output" in error_str or "Finalization rejected" in error_str:
                     messages.append(Message(role="user", content=f"Your previous response was invalid. Error: {error_str}. Please correct it and output strictly the requested JSON schema or tool call."))
                     continue
                 raise
@@ -137,7 +137,15 @@ class BaseAgent:
             # 5. Execute each tool and append results
             for call in res.tool_calls:
                 if call.name not in self.tools:
-                    result_raw = {"error": f"Agent attempted to call unauthorized tool: {call.name}. Use only the tools explicitly provided."}
+                    if call.name == self.output_model.__name__:
+                        try:
+                            parsed_obj = self.output_model(**call.arguments)
+                            self.validate_finalization(parsed_obj, self.executed_tools)
+                            return parsed_obj, self.executed_tools
+                        except Exception as e:
+                            result_raw = {"error": f"Failed to parse final output from tool call {call.name}: {str(e)}"}
+                    else:
+                        result_raw = {"error": f"Agent attempted to call unauthorized tool: {call.name}. Use only the tools explicitly provided. If you are trying to output the final answer, do NOT use a tool call. Return the JSON in the message body instead."}
                     self.executed_tools.append({
                         "tool_name": call.name,
                         "arguments": call.arguments,

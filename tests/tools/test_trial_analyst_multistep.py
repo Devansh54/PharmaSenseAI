@@ -65,3 +65,58 @@ def test_multistep_trial_analyst():
         assert len(tools) == 2
         assert tools[0]["tool_name"] == "sql_query_tool"
         assert tools[1]["tool_name"] == "sql_query_tool"
+
+def test_agent_hallucinates_output_schema_as_tool():
+    class HallucinatingLLM:
+        def __init__(self):
+            self.call_count = 0
+            
+        def complete(self, request: LLMRequest) -> LLMResponse:
+            self.call_count += 1
+            tc = ToolCall(
+                id=f'call_{self.call_count}',
+                name='TrialDataAnalystOutput',
+                arguments={'summary': 'Directly returned as tool', 'limitations': ['None']}
+            )
+            return LLMResponse(content='', tool_calls=[tc], parsed=None, provider_metadata={})
+
+    db_url = os.environ.get("EVAL_DATABASE_URL", DATABASE_URL)
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        llm = HallucinatingLLM()
+        agent = create_trial_data_analyst(session, llm)
+        result, tools = agent.run("test prompt")
+        
+        # It should intercept the tool call on the first try and return!
+        assert llm.call_count == 1
+        assert result.summary == "Directly returned as tool"
+        assert len(tools) == 0
+
+def test_agent_invalid_json_retry():
+    class InvalidJsonLLM:
+        def __init__(self):
+            self.call_count = 0
+            
+        def complete(self, request: LLMRequest) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                from pharmasense.llm.contracts import LLMInvalidOutputError
+                raise LLMInvalidOutputError("Structured output is not valid JSON")
+            else:
+                from pharmasense.agents.trial import TrialDataAnalystOutput
+                return LLMResponse(
+                    content='{}',
+                    tool_calls=[],
+                    parsed=TrialDataAnalystOutput(summary='Fixed on retry', limitations=[]),
+                    provider_metadata={}
+                )
+
+    db_url = os.environ.get("EVAL_DATABASE_URL", DATABASE_URL)
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        llm = InvalidJsonLLM()
+        agent = create_trial_data_analyst(session, llm)
+        result, tools = agent.run("test prompt")
+        
+        assert llm.call_count == 2
+        assert result.summary == "Fixed on retry"
