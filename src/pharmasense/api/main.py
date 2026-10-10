@@ -104,20 +104,20 @@ async def create_analysis(
         if "Agent exceeded max iterations" in dump or "could not execute search" in dump:
             num_failed += 1
         # Check no evidence
-        elif res.get("no_evidence_found") is True or "No data found" in str(res.get("summary", "")):
+        elif res.get("no_evidence_found") is True or "No data found" in str(res.get("summary", "")) or "No matching structured" in str(res.get("summary", "")):
             num_no_evidence += 1
         else:
             num_success += 1
 
     if num_required > 0:
-        if num_failed == num_required:
-            status_str = "failed"
-        elif num_failed > 0:
-            status_str = "partial_success"
-        elif num_success > 0:
+        if num_success > 0 and num_failed == 0:
             status_str = "success"
-        else:
+        elif num_success > 0 and num_failed > 0:
+            status_str = "partial_success"
+        elif num_success == 0 and num_failed == 0 and num_no_evidence > 0:
             status_str = "no_evidence"
+        else:
+            status_str = "failed"
     else:
         if errors:
             status_str = "partial_success"

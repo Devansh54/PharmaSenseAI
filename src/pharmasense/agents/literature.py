@@ -54,6 +54,21 @@ class LiteratureResearchAgent(BaseAgent):
                 ), getattr(self, "executed_tools", [])
             raise
 
+    def check_early_termination(self) -> BaseModel | None:
+        if not hasattr(self, "executed_tools") or not self.executed_tools:
+            return None
+            
+        last_tool = self.executed_tools[-1]
+        if last_tool["tool_name"] == "vector_search_tool":
+            res = last_tool["result"]
+            if not res.get("error") and res.get("chunks") is not None and len(res["chunks"]) == 0:
+                return LiteratureResearchOutput(
+                    findings="No relevant literature found.",
+                    citations=[],
+                    no_evidence_found=True
+                )
+        return None
+
 def create_literature_research_agent(session: Session, llm: LLMProvider) -> BaseAgent:
     instruction_path = Path("agent_specs/literature_research/instructions.md")
     return LiteratureResearchAgent(
