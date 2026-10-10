@@ -6,7 +6,7 @@ def try_deterministic_route(prompt: str) -> Plan | None:
     prompt_lower = prompt.lower()
 
     # 1. Out-of-scope / Medical Advice
-    if re.search(r'\b(medical advice|treatment|prescribe|prescription|medication should a patient take|drug should i prescribe|treatment should this patient take)\b', prompt_lower):
+    if re.search(r'\b(medical advice|treatment|prescribe|prescription|medication should (a patient|i) take|drug should i prescribe|treatment should this patient take)\b', prompt_lower):
         # We can simulate an empty plan that the orchestrator will fail on, 
         # or we can raise an error/return a plan with no specialists. 
         # The planner raises an error if selected_specialists is empty.
@@ -35,7 +35,7 @@ def try_deterministic_route(prompt: str) -> Plan | None:
         )
 
     # 3.5. Trial + Research combined only (e.g. Q9)
-    if re.search(r'\b(summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower) and not re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower):
+    if re.search(r'\b(summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature|trial and research synthesis|trial.*research findings)\b', prompt_lower) and not re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower):
         return Plan(
             workflow_type="parallel",
             selected_specialists=[
@@ -65,7 +65,6 @@ def try_deterministic_route(prompt: str) -> Plan | None:
             resolved_entities={}
         )
 
-
     # 4. Multi-agent "full picture" (4-agent deep dive)
     if re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower) or (re.search(r'\b(summarize.*(trial|clinical).*(research|evidence)|combine.*clinical.*literature)\b', prompt_lower) and re.search(r'\b(full picture|overall profile|compound investigation)\b', prompt_lower)):
         return Plan(
@@ -89,7 +88,7 @@ def try_deterministic_route(prompt: str) -> Plan | None:
     matches = set()
 
     # Safety is prioritized if explicit triage/AE terms exist
-    if re.search(r'\b(adverse event|ae|safety|safety event|seriousness|serious event|toxicity|triage)\b', prompt_lower):
+    if re.search(r'\b(adverse events?|ae|safety|safety events?|seriousness|serious events?|toxicity|triage)\b', prompt_lower):
         matches.add("Adverse Event Triage")
 
     # Trial matches
@@ -97,12 +96,17 @@ def try_deterministic_route(prompt: str) -> Plan | None:
         matches.add("Trial Data Analyst")
 
     # Literature matches
-    if re.search(r'\b(research|literature|document|papers|evidence|findings|internal research)\b', prompt_lower):
+    if re.search(r'\b(research|literature|documents?|papers?|evidence|findings?|internal research)\b', prompt_lower):
         matches.add("Literature Research")
 
     # Similarity matches
     if re.search(r'\b(similar|similarity|related compounds?|comparable)\b', prompt_lower):
         matches.add("Compound Similarity")
+
+    # If it matches both Literature and Trial Data Analyst because of "laboratory findings"
+    if "Literature Research" in matches and "Trial Data Analyst" in matches:
+        if "laboratory" in prompt_lower or "lab" in prompt_lower:
+            matches.remove("Literature Research")
 
     # If it matches Adverse Event AND Trial (e.g. "adverse event for Trial TRL-0032"),
     # it's usually an AE triage task primarily. Let's refine conflicts:

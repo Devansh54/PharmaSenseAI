@@ -78,5 +78,34 @@ def test_planner_deterministic_q3():
     assert plan.workflow_type == "single"
     assert plan.selected_specialists == ["Trial Data Analyst"]
     assert "sites_by_trial_attributes" in plan.task_descriptions["Trial Data Analyst"]
-    # Let's check for the exact instruction instead.
     assert "MUST use the `sites_by_trial_attributes`" in plan.task_descriptions["Trial Data Analyst"]
+
+def test_planner_routing_matrix():
+    cases = [
+        ("Which Phase II oncology trials are below 60% enrollment right now?", ["Trial Data Analyst"]),
+        ("What is the Phase II oncology enrollment status?", ["Trial Data Analyst"]),
+        ("What are the trial sites and participants for TRL-0001?", ["Trial Data Analyst"]),
+        ("Find JAK2 and cardiotoxicity literature.", ["Literature Research"]),
+        ("Is there any evidence for unknown compound ZXQ-9999?", ["Literature Research"]),
+        ("List the serious adverse events in TRL-0034.", ["Adverse Event Triage"]),
+        ("What is the compound similarity for VLX-1000?", ["Compound Similarity"]),
+        ("What are the laboratory findings for VLX-1000?", ["Trial Data Analyst"]),
+        ("Please provide a trial and research synthesis for DKU-1001.", ["Trial Data Analyst", "Literature Research"]),
+        ("I have chest pain, what medication should I take?", [])
+    ]
+    
+    llm = MockLLM({})
+    planner = PlannerNode(llm)
+    
+    for prompt, expected_specialists in cases:
+        state = WorkflowState(request_id="1", user_prompt=prompt, plan=None, specialist_results={}, final_report=None, errors=[])
+        res = planner(state)
+        
+        if len(expected_specialists) == 0:
+            # Case 10 returns an error with empty specialists
+            assert "errors" in res
+            assert res["errors"] == ["Out-of-scope request blocked."]
+        else:
+            assert "errors" not in res
+            plan = res["plan"]
+            assert sorted(plan.selected_specialists) == sorted(expected_specialists)

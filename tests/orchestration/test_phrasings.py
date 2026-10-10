@@ -113,13 +113,21 @@ def test_phrasings_laboratory_results():
         check_routing(p, ["Trial Data Analyst"])
 
 def test_phrasings_multi_domain_synthesis():
-    phrases = [
+    phrases_4_agent = [
         "Give me the full picture on VLX-1000.",
+        "Give me the overall profile of VLX-1000.",
+        "I need a complete compound investigation for VLX-1000."
+    ]
+    for p in phrases_4_agent:
+        check_routing(p, ["Trial Data Analyst", "Literature Research", "Adverse Event Triage", "Compound Similarity"])
+
+def test_phrasings_trial_research_synthesis():
+    phrases_2_agent = [
         "Summarize the trial and research evidence for VLX-1000.",
         "Combine the available clinical and literature findings for VLX-1000."
     ]
-    for p in phrases:
-        check_routing(p, ["Trial Data Analyst", "Literature Research", "Adverse Event Triage", "Compound Similarity"])
+    for p in phrases_2_agent:
+        check_routing(p, ["Trial Data Analyst", "Literature Research"])
 
 def test_phrasings_medical_advice():
     phrases = [
