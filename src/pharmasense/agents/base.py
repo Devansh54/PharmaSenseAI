@@ -54,8 +54,8 @@ class BaseAgent:
             def minify_schema(s: dict) -> dict:
                 minified = {}
                 for k, v in s.items():
-                    # Preserve types, enums, items, and properties
-                    if k in ("type", "enum", "items", "properties", "required", "$defs"):
+                    # Preserve types, enums, items, properties, and anyOf
+                    if k in ("type", "enum", "items", "properties", "required", "$defs", "anyOf"):
                         if isinstance(v, dict) and k in ("properties", "$defs"):
                             minified[k] = {pk: minify_schema(pv) for pk, pv in v.items()}
                         elif isinstance(v, dict) and k == "items":
@@ -120,6 +120,9 @@ class BaseAgent:
             except (LLMGatewayError, RuntimeError, ValueError) as e:
                 error_str = str(e)
                 if "Structured output parsing failed" in error_str or "Structured output is not valid JSON" in error_str or "Structured output failed schema validation" in error_str or "no valid parsed output" in error_str or "Finalization rejected" in error_str:
+                    from pharmasense.llm.contracts import LLMInvalidOutputError
+                    if isinstance(e, LLMInvalidOutputError) and getattr(e, "raw_content", None):
+                        messages.append(Message(role="assistant", content=e.raw_content))
                     messages.append(Message(role="user", content=f"Your previous response was invalid. Error: {error_str}. Please correct it and output strictly the requested JSON schema or tool call."))
                     continue
                 raise
