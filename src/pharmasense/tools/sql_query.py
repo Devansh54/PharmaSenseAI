@@ -73,6 +73,9 @@ def sql_query_tool(session: Session, input_data: SqlQueryInput) -> SqlQueryOutpu
     import re
     bind_params = set(re.findall(r":([a-zA-Z0-9_]+)", str(query)))
 
+    if input_data.query_id == "trials_by_compound" and "compound_name" in input_data.parameters and "compound_id" not in input_data.parameters:
+        input_data.parameters["compound_id"] = input_data.parameters.pop("compound_name")
+
     invalid_params = [p for p in input_data.parameters if p not in bind_params]
     if invalid_params:
         return SqlQueryOutput(
