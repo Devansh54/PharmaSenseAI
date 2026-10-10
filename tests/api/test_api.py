@@ -167,6 +167,58 @@ def test_analysis_partial_success():
         assert response.status_code == 200
         assert response.json()["status"] == "partial_success"
 
+def test_status_required_behavior_success():
+    state = {
+        "final_report": {"report_content": "ok"},
+        "specialist_results": {
+            "A": {"findings": "ok"},
+            "B": {"findings": "ok"}
+        }
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post("/v1/analyses", json={"user_prompt": "Hello"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "success"
+
+def test_status_required_behavior_no_evidence():
+    state = {
+        "final_report": {"report_content": "ok"},
+        "specialist_results": {
+            "A": {"no_evidence_found": True},
+            "B": {"summary": "No data found"}
+        }
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post("/v1/analyses", json={"user_prompt": "Hello"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "no_evidence"
+
+def test_status_required_behavior_partial_success():
+    state = {
+        "final_report": {"report_content": "ok"},
+        "specialist_results": {
+            "A": {"findings": "ok"},
+            "B": {"limitations": ["Agent exceeded max iterations before producing valid output."]}
+        }
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post("/v1/analyses", json={"user_prompt": "Hello"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "partial_success"
+
+def test_status_required_behavior_failed():
+    state = {
+        "final_report": {"report_content": "ok"},
+        "specialist_results": {
+            "A": {"limitations": ["Agent exceeded max iterations"]},
+            "B": {"findings": "could not execute search"}
+        }
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post("/v1/analyses", json={"user_prompt": "Hello"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "failed"
+
 def test_analysis_malformed():
     response = client.post("/v1/analyses", json={"wrong_field": "Hello"})
     assert response.status_code == 422

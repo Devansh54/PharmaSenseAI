@@ -77,20 +77,56 @@ async def create_analysis(
     status_str = "success"
     specialist_results = state.get("specialist_results", {})
     
-    all_no_evidence = False
-    if specialist_results:
-        all_no_evidence = True
-        for name, res in specialist_results.items():
-            if isinstance(res, dict) and res.get("no_evidence_found") is True:
-                continue
-            all_no_evidence = False
-            break
+    num_required = 0
+    num_success = 0
+    num_no_evidence = 0
+    num_failed = 0
+    
+    plan = state.get("plan")
+    if plan and hasattr(plan, "selected_specialists"):
+        required_specialists = plan.selected_specialists
+    elif specialist_results:
+        required_specialists = list(specialist_results.keys())
+    else:
+        required_specialists = []
+        
+    for spec in required_specialists:
+        num_required += 1
+        res = specialist_results.get(spec)
+        if not isinstance(res, dict):
+            num_failed += 1
+            continue
             
-    if all_no_evidence:
-        status_str = "no_evidence"
-    elif any("No_evidence_found = True" in l for l in limitations) or "no evidence was identified" in findings.lower() or "no actionable evidence" in findings.lower() or "no clinical trials" in findings.lower():
-        status_str = "no_evidence"
-    elif errors or "could not be fully verified" in findings:
+        import json
+        dump = json.dumps(res)
+        
+        # Check execution failures
+        if "Agent exceeded max iterations" in dump or "could not execute search" in dump:
+            num_failed += 1
+        # Check no evidence
+        elif res.get("no_evidence_found") is True or "No data found" in str(res.get("summary", "")):
+            num_no_evidence += 1
+        else:
+            num_success += 1
+
+    if num_required > 0:
+        if num_failed == num_required:
+            status_str = "failed"
+        elif num_failed > 0:
+            status_str = "partial_success"
+        elif num_success > 0:
+            status_str = "success"
+        else:
+            status_str = "no_evidence"
+    else:
+        if errors:
+            status_str = "partial_success"
+        elif any("No_evidence_found = True" in l for l in limitations) or "no evidence was identified" in findings.lower() or "no actionable evidence" in findings.lower() or "no clinical trials" in findings.lower():
+            status_str = "no_evidence"
+        else:
+            status_str = "success"
+            
+    if errors and status_str == "success":
         status_str = "partial_success"
 
     citations_data = report.get("citations_resolved", [])
