@@ -54,10 +54,16 @@ class LiteratureResearchAgent(BaseAgent):
             if "Agent exceeded max iterations" in str(e):
                 tools = getattr(self, "executed_tools", [])
                 tool_errors = [t["result"]["error"] for t in tools if isinstance(t.get("result"), dict) and t.get("result", {}).get("error")]
+                
+                if tool_errors:
+                    findings = "Search execution failed."
+                else:
+                    findings = "Agent failed to synthesize retrieved evidence."
+                    
                 return LiteratureResearchOutput(
-                    findings="No relevant literature found or could not execute search.",
+                    findings=findings,
                     citations=[],
-                    no_evidence_found=True,
+                    no_evidence_found=False,
                     limitations=["Agent exceeded max iterations before producing valid output."] + tool_errors
                 ), tools
             raise
