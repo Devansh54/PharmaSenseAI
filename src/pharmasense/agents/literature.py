@@ -10,6 +10,7 @@ class LiteratureResearchOutput(BaseModel):
     findings: str = Field(..., description="Summary of evidence from literature.")
     citations: list[str] = Field(default_factory=list, description="List of document chunk references.")
     no_evidence_found: bool = Field(default=False, description="True if no supporting evidence was retrieved.")
+    limitations: list[str] = Field(default_factory=list, description="Any search limitations or execution errors encountered.")
 
     @field_validator("citations", mode="before")
     @classmethod
@@ -44,14 +45,21 @@ class LiteratureResearchAgent(BaseAgent):
 
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
         try:
-            return super().run(prompt, single_tool_mode)
+            res, tools = super().run(prompt, single_tool_mode)
+            tool_errors = [t["result"]["error"] for t in tools if isinstance(t.get("result"), dict) and t.get("result", {}).get("error")]
+            if hasattr(res, "limitations") and tool_errors:
+                res.limitations.extend(tool_errors)
+            return res, tools
         except RuntimeError as e:
             if "Agent exceeded max iterations" in str(e):
+                tools = getattr(self, "executed_tools", [])
+                tool_errors = [t["result"]["error"] for t in tools if isinstance(t.get("result"), dict) and t.get("result", {}).get("error")]
                 return LiteratureResearchOutput(
                     findings="No relevant literature found or could not execute search.",
                     citations=[],
-                    no_evidence_found=True
-                ), getattr(self, "executed_tools", [])
+                    no_evidence_found=True,
+                    limitations=["Agent exceeded max iterations before producing valid output."] + tool_errors
+                ), tools
             raise
 
     def check_early_termination(self) -> BaseModel | None:

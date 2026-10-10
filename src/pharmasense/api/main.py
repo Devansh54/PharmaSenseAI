@@ -100,8 +100,11 @@ async def create_analysis(
         import json
         dump = json.dumps(res)
         
-        # Check execution failures
-        if "Agent exceeded max iterations" in dump or "could not execute search" in dump:
+        limitations = res.get("limitations", [])
+        tool_errors = [l for l in limitations if "No results found" not in str(l)]
+        
+        # Check explicit execution failures
+        if "Agent exceeded max iterations" in dump or tool_errors:
             num_failed += 1
         # Check no evidence
         elif res.get("no_evidence_found") is True or "No data found" in str(res.get("summary", "")) or "No matching structured" in str(res.get("summary", "")):
