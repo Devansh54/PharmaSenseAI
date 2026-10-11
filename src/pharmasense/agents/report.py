@@ -42,31 +42,39 @@ class ReportWriterAgent(BaseAgent):
             return super().run(prompt, single_tool_mode)
         except RuntimeError as e:
             if "Agent exceeded max iterations" in str(e):
-                if last_raw_content:
-                    import re
-                    lims = []
-                    matches = re.findall(r"Limitations?:\s*(.*)", prompt, re.IGNORECASE)
-                    for m in matches:
-                        m = m.strip()
-                        if m.startswith("[") and m.endswith("]"):
-                            import ast
-                            try:
-                                parsed_list = ast.literal_eval(m)
-                                if isinstance(parsed_list, list):
-                                    lims.extend(parsed_list)
-                            except:
-                                lims.append(m)
-                        else:
+                import re, ast
+                lims = []
+                matches = re.findall(r"Limitations?:\s*(.*)", prompt, re.IGNORECASE)
+                for m in matches:
+                    m = m.strip()
+                    if m.startswith("[") and m.endswith("]"):
+                        try:
+                            parsed_list = ast.literal_eval(m)
+                            if isinstance(parsed_list, list):
+                                lims.extend(parsed_list)
+                        except Exception:
                             lims.append(m)
-                    
-                    if not lims:
-                        lims = ["Upstream specialists reported no results or execution failed."]
-                    
-                    return ReportWriterOutput(
-                        report_text=last_raw_content.strip(),
-                        limitations_noted=lims,
-                        citations_resolved=[]
-                    ), getattr(self, "executed_tools", [])
+                    else:
+                        lims.append(m)
+
+                if not lims:
+                    lims = ["Upstream specialists reported no results or execution failed."]
+
+                if last_raw_content:
+                    report_text = last_raw_content.strip()
+                else:
+                    # Groq returned content=None throughout (tool-call-only responses).
+                    # Synthesize a deterministic no-evidence report rather than re-raising.
+                    report_text = (
+                        "No citable evidence was found. "
+                        "Both upstream specialists reported no results for the requested query."
+                    )
+
+                return ReportWriterOutput(
+                    report_text=report_text,
+                    limitations_noted=lims,
+                    citations_resolved=[]
+                ), getattr(self, "executed_tools", [])
             raise
         finally:
             self.llm.complete = original_complete

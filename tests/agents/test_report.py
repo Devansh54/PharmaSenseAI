@@ -121,3 +121,58 @@ def test_report_writer_no_evidence_pure_text():
         res, tools = agent.run(prompt)
         assert "No cited evidence" in res.report_text
         assert "No results found for ZXQ-9999." in res.limitations_noted
+
+
+def test_report_writer_content_none_tool_call_loop():
+    from pharmasense.llm.groq_adapter import GroqAdapter
+    from pharmasense.config import GroqAdapterConfig
+    from unittest.mock import MagicMock
+
+    class MockGroqClientContentNone:
+        def __init__(self):
+            self.chat = MagicMock()
+            self.chat.completions.create.side_effect = self.create_completion
+            self.call_count = 0
+
+        def create_completion(self, **kwargs):
+            self.call_count += 1
+            mock_choice = MagicMock()
+            tc = MagicMock()
+            tc.id = f"call_{self.call_count}"
+            tc.function.name = "citation_formatter_tool"
+            tc.function.arguments = '{"chunk_ids": []}'
+            mock_choice.message.content = None
+            mock_choice.message.tool_calls = [tc]
+            mock_choice.finish_reason = "tool_calls"
+            mock_completion = MagicMock()
+            mock_completion.choices = [mock_choice]
+            mock_completion.usage.prompt_tokens = 10
+            mock_completion.usage.completion_tokens = 5
+            return mock_completion
+
+    engine = create_engine("sqlite://")
+    with Session(engine) as session:
+        mock_client = MockGroqClientContentNone()
+        adapter = GroqAdapter(
+            config=GroqAdapterConfig(api_key="fake", model="llama"), client=mock_client
+        )
+        gateway = LLMGateway(adapter)
+        agent = create_report_writer_agent(session, gateway)
+
+        prompt = (
+            "Trial Analyst:\n"
+            "Summary: No matching structured records found.\n"
+            "Limitations: ['No results found for ZXQ-9999.']\n"
+            "Literature Research:\n"
+            "Summary: No relevant literature found."
+        )
+
+        res, tools = agent.run(prompt)
+
+        assert isinstance(res, ReportWriterOutput)
+        assert "No citable evidence" in res.report_text
+        assert "No results found for ZXQ-9999." in res.limitations_noted
+        assert res.citations_resolved == []
+        assert mock_client.call_count == 2
+
+
