@@ -12,7 +12,7 @@ class TrialDataAnalystOutput(BaseModel):
 class TrialDataAnalystAgent(BaseAgent):
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
         try:
-            return super().run(prompt, single_tool_mode)
+            return super().run(prompt, single_tool_mode=True)
         except RuntimeError as e:
             if "Agent exceeded max iterations" in str(e):
                 return TrialDataAnalystOutput(
