@@ -45,7 +45,7 @@ class LiteratureResearchAgent(BaseAgent):
 
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
         try:
-            res, tools = super().run(prompt, single_tool_mode)
+            res, tools = super().run(prompt, single_tool_mode=True)
             tool_errors = [t["result"]["error"] for t in tools if isinstance(t.get("result"), dict) and t.get("result", {}).get("error")]
             if hasattr(res, "limitations") and tool_errors:
                 res.limitations.extend(tool_errors)
