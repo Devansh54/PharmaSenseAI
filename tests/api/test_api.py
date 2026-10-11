@@ -206,6 +206,60 @@ def test_status_required_behavior_partial_success():
         assert response.status_code == 200
         assert response.json()["status"] == "partial_success"
 
+def test_status_classification_dku1001_parallel_success():
+    from pharmasense.orchestration.state import Plan
+
+    plan = Plan(
+        workflow_type="parallel",
+        selected_specialists=["Trial Data Analyst", "Literature Research"],
+        task_descriptions={
+            "Trial Data Analyst": "Summarize trial findings for DKU-1001",
+            "Literature Research": "Summarize research findings for DKU-1001"
+        }
+    )
+    state = {
+        "plan": plan,
+        "final_report": {
+            "report_content": "DKU-1001 demonstrated efficacy in Phase III trial TRL-0001 and literature findings.",
+            "citations_resolved": [
+                {
+                    "claim": "DKU-1001 demonstrates superior efficacy in Metabolic Disease.",
+                    "citations": ["DOC-00160::chunk::0"],
+                    "invalid_chunk_ids": []
+                }
+            ],
+            "limitations_noted": []
+        },
+        "specialist_results": {
+            "Trial Data Analyst": {
+                "summary": "DKU-1001 is evaluated in completed Phase III trial TRL-0001 for Metabolic Disease.",
+                "limitations": [
+                    "Trial data limited to completed Phase III trial TRL-0001; no active site enrollment requested."
+                ]
+            },
+            "Literature Research": {
+                "findings": "DKU-1001 demonstrates superior efficacy in Metabolic Disease based on DOC-00160.",
+                "citations": ["DOC-00160::chunk::0"],
+                "no_evidence_found": False,
+                "limitations": []
+            }
+        },
+        "errors": []
+    }
+    with patch("pharmasense.api.main.build_orchestration_graph", return_value=MockGraph(state)):
+        response = client.post(
+            "/v1/analyses",
+            json={"user_prompt": "Summarize the available trial and research findings for DKU-1001."}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["limitations"] == []
+        assert len(data["citations"]) == 1
+        assert data["citations"][0]["citations"] == ["DOC-00160::chunk::0"]
+        assert "Trial Data Analyst" in data["branch_outcomes"]
+        assert "Literature Research" in data["branch_outcomes"]
+
 def test_status_required_behavior_failed():
     state = {
         "final_report": {"report_content": "ok"},
