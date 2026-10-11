@@ -3,7 +3,12 @@ from typing import Dict, List, Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from pharmasense.retrieval.retrieval import search, RetrievalFilters
+from pharmasense.retrieval.retrieval import (
+    search,
+    lexical_search,
+    extract_compound_identifier,
+    RetrievalFilters,
+)
 from pharmasense.retrieval.embeddings import BGEEmbedder, EmbeddingProvider
 
 class VectorSearchInput(BaseModel):
@@ -28,23 +33,32 @@ def vector_search_tool(
     input_data: VectorSearchInput,
     embedder: EmbeddingProvider | None = None
 ) -> VectorSearchOutput:
-    """Search the document chunks using local embeddings."""
-    active_embedder = embedder or get_embedder()
-
+    """Search the document chunks using local embeddings or lexical compound lookup."""
     filters_dict = input_data.metadata_filters or {}
+    compound_id = filters_dict.get("compound_id") or extract_compound_identifier(input_data.query)
+
     filters = RetrievalFilters(
         doc_type=filters_dict.get("doc_type"),
-        compound_id=filters_dict.get("compound_id"),
+        compound_id=compound_id,
         trial_id=filters_dict.get("trial_id")
     )
 
-    results = search(
-        session=session,
-        query=input_data.query,
-        embedder=active_embedder,
-        top_k=input_data.top_k,
-        filters=filters
-    )
+    if compound_id:
+        results = lexical_search(
+            session=session,
+            compound_id=compound_id,
+            top_k=input_data.top_k,
+            filters=filters
+        )
+    else:
+        active_embedder = embedder or get_embedder()
+        results = search(
+            session=session,
+            query=input_data.query,
+            embedder=active_embedder,
+            top_k=input_data.top_k,
+            filters=filters
+        )
 
     from pharmasense.validation.security import detect_injection
 

@@ -8,13 +8,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date as date_type
+import re
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from pharmasense.config import DEFAULT_TOP_K
 from pharmasense.db.models import DocumentChunk
+from pharmasense.db.source_schema import ResearchDocument
 from pharmasense.retrieval.embeddings import EmbeddingProvider
 
 
@@ -77,6 +79,82 @@ def _to_result(row: DocumentChunk, distance: float) -> RetrievalResult:
     )
 
 
+COMPOUND_ID_PATTERN = re.compile(r'\b([A-Za-z]{2,5}-\d{2,5}(?:-[A-Za-z0-9]+)?)\b')
+NON_COMPOUND_PREFIXES = {
+    "PHASE", "STAGE", "STEP", "POST", "PRE", "FOLLOW", "COVID", "DOC", "CHK", "TRIAL"
+}
+
+
+def extract_compound_identifier(query: str) -> Optional[str]:
+    """Extract an explicit compound identifier (e.g. 'ZXQ-9999', 'CMP-0001') if present in query."""
+    if not query or not query.strip():
+        return None
+    matches = COMPOUND_ID_PATTERN.findall(query)
+    for m in matches:
+        prefix = m.split("-")[0].upper()
+        if prefix not in NON_COMPOUND_PREFIXES:
+            return m.upper()
+    return None
+
+
+def lexical_search(
+    session: Session,
+    compound_id: str,
+    top_k: int = DEFAULT_TOP_K,
+    filters: Optional[RetrievalFilters] = None,
+) -> List[RetrievalResult]:
+    """Execute a parameterized lexical lookup across the research-document corpus for an explicit compound identifier.
+
+    Searches DocumentChunk and ResearchDocument by compound_id, chunk text, full text, and title.
+    Returns matching source content and existing citation metadata.
+    Does NOT return arbitrary vector neighbors if no matching records exist.
+    Preserves database execution errors if the query fails.
+    """
+    if not compound_id or not compound_id.strip():
+        return []
+
+    filters = filters or RetrievalFilters()
+    comp_clean = compound_id.strip()
+
+    stmt = (
+        select(DocumentChunk)
+        .outerjoin(ResearchDocument, DocumentChunk.doc_id == ResearchDocument.doc_id)
+        .where(
+            or_(
+                DocumentChunk.compound_id == comp_clean,
+                func.upper(DocumentChunk.compound_id) == comp_clean.upper(),
+                DocumentChunk.chunk_text.ilike(f"%{comp_clean}%"),
+                DocumentChunk.title.ilike(f"%{comp_clean}%"),
+                DocumentChunk.tags.ilike(f"%{comp_clean}%"),
+                ResearchDocument.compound_id == comp_clean,
+                func.upper(ResearchDocument.compound_id) == comp_clean.upper(),
+                ResearchDocument.full_text.ilike(f"%{comp_clean}%"),
+                ResearchDocument.title.ilike(f"%{comp_clean}%"),
+            )
+        )
+    )
+
+    if not filters.include_duplicates:
+        stmt = stmt.where(DocumentChunk.is_duplicate.is_(False))
+    if filters.doc_type is not None:
+        stmt = stmt.where(DocumentChunk.doc_type == filters.doc_type)
+    if filters.trial_id is not None:
+        stmt = stmt.where(DocumentChunk.trial_id == filters.trial_id)
+    if filters.tag is not None:
+        stmt = stmt.where(DocumentChunk.tags.ilike(f"%{filters.tag}%"))
+    if filters.date_from is not None:
+        stmt = stmt.where(DocumentChunk.date >= filters.date_from)
+    if filters.date_to is not None:
+        stmt = stmt.where(DocumentChunk.date <= filters.date_to)
+    if filters.index_version is not None:
+        stmt = stmt.where(DocumentChunk.index_version == filters.index_version)
+
+    stmt = stmt.order_by(DocumentChunk.chunk_index.asc()).limit(top_k)
+
+    rows = session.execute(stmt).scalars().all()
+    return [_to_result(row, 0.0) for row in rows]
+
+
 def search(
     session: Session,
     query: str,
@@ -104,6 +182,16 @@ def search(
         return []
 
     filters = filters or RetrievalFilters()
+
+    # Ground queries with an explicit compound identifier in source identifiers
+    extracted_compound = extract_compound_identifier(query)
+    if extracted_compound and not filters.compound_id:
+        return lexical_search(
+            session=session,
+            compound_id=extracted_compound,
+            top_k=top_k,
+            filters=filters,
+        )
     [query_vector] = embedder.embed([query])
     distance_expr = DocumentChunk.embedding.cosine_distance(query_vector)
 
