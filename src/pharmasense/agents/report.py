@@ -20,6 +20,75 @@ class ReportWriterOutput(BaseModel):
             return [v] if v.strip() else []
         return v
 
+
+import ast
+import re
+
+_FAILURE_PATTERNS = [
+    r"\bfailed\b",
+    r"\bfailure\b",
+    r"\berror(?:s)?\b",
+    r"could not execute",
+    r"connection lost",
+    r"timeout",
+    r"exceeded max iterations",
+]
+
+_NO_EVIDENCE_PATTERNS = [
+    r"no matching (?:structured )?records",
+    r"no relevant literature",
+    r"no results found",
+    r"no data found",
+    r"no evidence found",
+    r"no evidence was found",
+    r"no citable evidence",
+    r"no matching records",
+    r"no_evidence_found\s*[:=]\s*true",
+    r"reported no results",
+]
+
+_POSITIVE_PATTERNS = [
+    r"\b(?:found|identified)\s+[1-9]\d*\b",
+    r"\b\d+\s+(?:trials?|records?|papers?|documents?|studies|publications?)\b",
+    r"\befficacy\b",
+    r"\bsignificant (?:improvement|reduction)\b",
+    r"\badverse events?:\s*\[.+\]",
+    r"\bsimilar compounds?:\s*\[.+\]",
+]
+
+
+def _is_upstream_no_evidence(prompt: str) -> bool:
+    if not prompt:
+        return False
+
+    prompt_lower = prompt.lower()
+
+    for pat in _FAILURE_PATTERNS:
+        if re.search(pat, prompt_lower):
+            return False
+
+    section_pattern = (
+        r"(?:---\s*[A-Za-z0-9_\s]+?\s*Findings\s*---|(?:\bTrial(?: Data)? Analyst|\bLiterature Research|\bAdverse Event(?: Triage)?|\bCompound Similarity)\s*:)"
+    )
+    splits = re.split(section_pattern, prompt, flags=re.IGNORECASE)
+    specialist_sections = [s.strip() for s in splits[1:] if s.strip()]
+
+    if specialist_sections:
+        for sec in specialist_sections:
+            sec_lower = sec.lower()
+            has_no_ev = any(re.search(pat, sec_lower) for pat in _NO_EVIDENCE_PATTERNS)
+            if not has_no_ev:
+                return False
+            has_pos = any(re.search(pat, sec_lower) for pat in _POSITIVE_PATTERNS)
+            if has_pos:
+                return False
+        return True
+    else:
+        has_no_ev = any(re.search(pat, prompt_lower) for pat in _NO_EVIDENCE_PATTERNS)
+        has_pos = any(re.search(pat, prompt_lower) for pat in _POSITIVE_PATTERNS)
+        return has_no_ev and not has_pos
+
+
 class ReportWriterAgent(BaseAgent):
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
         original_complete = self.llm.complete
@@ -42,7 +111,6 @@ class ReportWriterAgent(BaseAgent):
             return super().run(prompt, single_tool_mode)
         except RuntimeError as e:
             if "Agent exceeded max iterations" in str(e):
-                import re, ast
                 lims = []
                 matches = re.findall(r"Limitations?:\s*(.*)", prompt, re.IGNORECASE)
                 for m in matches:
@@ -57,18 +125,27 @@ class ReportWriterAgent(BaseAgent):
                     else:
                         lims.append(m)
 
-                if not lims:
-                    lims = ["Upstream specialists reported no results or execution failed."]
-
                 if last_raw_content:
                     report_text = last_raw_content.strip()
-                else:
-                    # Groq returned content=None throughout (tool-call-only responses).
-                    # Synthesize a deterministic no-evidence report rather than re-raising.
+                    if not lims:
+                        lims = ["Upstream specialists reported no results or execution failed."]
+                elif _is_upstream_no_evidence(prompt):
+                    if not lims:
+                        lims = ["Upstream specialists reported no results or execution failed."]
                     report_text = (
                         "No citable evidence was found. "
                         "Both upstream specialists reported no results for the requested query."
                     )
+                else:
+                    report_text = (
+                        "Report synthesis could not be completed. "
+                        "The Report Writer exceeded its maximum iteration limit before producing valid output."
+                    )
+                    failure_limitation = (
+                        "Report Writer exceeded maximum iterations before producing valid output."
+                    )
+                    if failure_limitation not in lims:
+                        lims.append(failure_limitation)
 
                 return ReportWriterOutput(
                     report_text=report_text,

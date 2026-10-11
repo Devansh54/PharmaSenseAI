@@ -176,3 +176,116 @@ def test_report_writer_content_none_tool_call_loop():
         assert mock_client.call_count == 2
 
 
+def test_report_writer_iteration_failure_when_evidence_ambiguous_or_unestablished():
+    from pharmasense.llm.groq_adapter import GroqAdapter
+    from pharmasense.config import GroqAdapterConfig
+    from unittest.mock import MagicMock
+
+    class MockGroqClientLoop:
+        def __init__(self):
+            self.chat = MagicMock()
+            self.chat.completions.create.side_effect = self.create_completion
+            self.call_count = 0
+
+        def create_completion(self, **kwargs):
+            self.call_count += 1
+            mock_choice = MagicMock()
+            tc = MagicMock()
+            tc.id = f"call_{self.call_count}"
+            tc.function.name = "citation_formatter_tool"
+            tc.function.arguments = '{"chunk_ids": []}'
+            mock_choice.message.content = None
+            mock_choice.message.tool_calls = [tc]
+            mock_choice.finish_reason = "tool_calls"
+            mock_completion = MagicMock()
+            mock_completion.choices = [mock_choice]
+            mock_completion.usage.prompt_tokens = 10
+            mock_completion.usage.completion_tokens = 5
+            return mock_completion
+
+    engine = create_engine("sqlite://")
+    with Session(engine) as session:
+        mock_client = MockGroqClientLoop()
+        adapter = GroqAdapter(
+            config=GroqAdapterConfig(api_key="fake", model="llama"), client=mock_client
+        )
+        gateway = LLMGateway(adapter)
+        agent = create_report_writer_agent(session, gateway)
+
+        # Upstream results contain positive evidence, not an established absence of evidence
+        prompt = (
+            "--- Trial Data Analyst Findings ---\n"
+            "Summary: Found 3 clinical trials for compound ABC.\n"
+            "Limitations: ['Phase 2 data preliminary.']\n\n"
+            "--- Literature Research Findings ---\n"
+            "Findings: Document DOC-101 indicates positive receptor binding.\n"
+        )
+
+        res, tools = agent.run(prompt)
+
+        assert isinstance(res, ReportWriterOutput)
+        assert "Report synthesis could not be completed" in res.report_text
+        assert "No citable evidence" not in res.report_text
+        assert "Report Writer exceeded maximum iterations before producing valid output." in res.limitations_noted
+        assert "Phase 2 data preliminary." in res.limitations_noted
+        assert res.citations_resolved == []
+        assert mock_client.call_count == 2
+
+
+def test_report_writer_iteration_failure_when_upstream_specialist_failed():
+    from pharmasense.llm.groq_adapter import GroqAdapter
+    from pharmasense.config import GroqAdapterConfig
+    from unittest.mock import MagicMock
+
+    class MockGroqClientLoop:
+        def __init__(self):
+            self.chat = MagicMock()
+            self.chat.completions.create.side_effect = self.create_completion
+            self.call_count = 0
+
+        def create_completion(self, **kwargs):
+            self.call_count += 1
+            mock_choice = MagicMock()
+            tc = MagicMock()
+            tc.id = f"call_{self.call_count}"
+            tc.function.name = "citation_formatter_tool"
+            tc.function.arguments = '{"chunk_ids": []}'
+            mock_choice.message.content = None
+            mock_choice.message.tool_calls = [tc]
+            mock_choice.finish_reason = "tool_calls"
+            mock_completion = MagicMock()
+            mock_completion.choices = [mock_choice]
+            mock_completion.usage.prompt_tokens = 10
+            mock_completion.usage.completion_tokens = 5
+            return mock_completion
+
+    engine = create_engine("sqlite://")
+    with Session(engine) as session:
+        mock_client = MockGroqClientLoop()
+        adapter = GroqAdapter(
+            config=GroqAdapterConfig(api_key="fake", model="llama"), client=mock_client
+        )
+        gateway = LLMGateway(adapter)
+        agent = create_report_writer_agent(session, gateway)
+
+        # One specialist reports no records, but the other had an execution failure
+        prompt = (
+            "--- Trial Data Analyst Findings ---\n"
+            "Summary: No matching structured records found.\n"
+            "Limitations: ['No results found for ZXQ-9999.']\n\n"
+            "--- Literature Research Findings ---\n"
+            "Findings: Search execution failed due to database connection lost.\n"
+        )
+
+        res, tools = agent.run(prompt)
+
+        assert isinstance(res, ReportWriterOutput)
+        assert "Report synthesis could not be completed" in res.report_text
+        assert "No citable evidence" not in res.report_text
+        assert "Report Writer exceeded maximum iterations before producing valid output." in res.limitations_noted
+        assert "No results found for ZXQ-9999." in res.limitations_noted
+        assert res.citations_resolved == []
+        assert mock_client.call_count == 2
+
+
+
