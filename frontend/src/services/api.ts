@@ -11,14 +11,39 @@ import type {
   ReviewTask
 } from '../types/api';
 
-const getBaseUrl = (): string => {
+export const PRODUCTION_API_URL = 'https://pharmasense-api.onrender.com';
+
+export const getBaseUrl = (): string => {
   // Support both Vite (import.meta.env) and Node.js test runners (process.env)
   const envProcess = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
   if (envProcess?.env?.VITE_API_BASE_URL) {
     return envProcess.env.VITE_API_BASE_URL;
   }
-  const metaEnv = (import.meta as unknown as { env?: Record<string, string | undefined> })?.env;
-  return metaEnv?.VITE_API_BASE_URL || '';
+  // In Node.js test contexts without explicit VITE_API_BASE_URL, default to ''
+  if (envProcess?.env && typeof window === 'undefined') {
+    return '';
+  }
+
+  const metaEnv = (import.meta as unknown as { env?: Record<string, string | boolean | undefined> })?.env;
+  const configured = metaEnv?.VITE_API_BASE_URL;
+  if (typeof configured === 'string' && configured.trim()) {
+    return configured.trim();
+  }
+
+  // In production builds, always default to the live Render backend
+  if (metaEnv?.PROD) {
+    return PRODUCTION_API_URL;
+  }
+
+  // Local development defaults to empty string (proxied by Vite to http://127.0.0.1:8000)
+  return '';
+};
+
+const getServerHint = (): string => {
+  const base = getBaseUrl();
+  return base
+    ? `Please verify that the API server at ${base} is reachable.`
+    : 'Please verify that the API server is running on port 8000.';
 };
 
 export class AnalysisApiError extends Error {
@@ -101,7 +126,7 @@ export async function createAnalysis(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown network failure';
     throw new AnalysisApiError(
-      `Unable to connect to PharmaSenseAI backend (${errorMsg}). Please verify that the API server is running on port 8000.`,
+      `Unable to connect to PharmaSenseAI backend (${errorMsg}). ${getServerHint()}`,
       'network'
     );
   }
@@ -232,7 +257,7 @@ export async function getEvidence(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown network failure';
     throw new AnalysisApiError(
-      `Unable to connect to evidence service (${errorMsg}). Please verify that the API server is running on port 8000.`,
+      `Unable to connect to evidence service (${errorMsg}). ${getServerHint()}`,
       'network'
     );
   }
@@ -324,7 +349,7 @@ export async function listReviews(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown network failure';
     throw new AnalysisApiError(
-      `Unable to connect to review service (${errorMsg}). Please verify that the API server is running on port 8000.`,
+      `Unable to connect to review service (${errorMsg}). ${getServerHint()}`,
       'network'
     );
   }
@@ -408,7 +433,7 @@ export async function getReview(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown network failure';
     throw new AnalysisApiError(
-      `Unable to connect to review service (${errorMsg}). Please verify that the API server is running on port 8000.`,
+      `Unable to connect to review service (${errorMsg}). ${getServerHint()}`,
       'network'
     );
   }
@@ -529,7 +554,7 @@ export async function createReviewDecision(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown network failure';
     throw new AnalysisApiError(
-      `Unable to connect to review service (${errorMsg}). Please verify that the API server is running on port 8000.`,
+      `Unable to connect to review service (${errorMsg}). ${getServerHint()}`,
       'network'
     );
   }

@@ -23,9 +23,22 @@ from pharmasense.observability.telemetry import TelemetryManager
 
 app = FastAPI(title="PharmaSense AI API")
 
+DEFAULT_ALLOWED_ORIGINS = [
+    "https://devansh54.github.io",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+]
+
+_raw_allowed = os.environ.get("ALLOWED_ORIGINS")
+_allowed_origins = (
+    [origin.strip() for origin in _raw_allowed.split(",") if origin.strip()]
+    if _raw_allowed
+    else DEFAULT_ALLOWED_ORIGINS
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.environ.get("ALLOWED_ORIGINS", "*").split(",") if os.environ.get("ALLOWED_ORIGINS") else ["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

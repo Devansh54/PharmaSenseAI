@@ -88,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="sidebar-status-label">Backend API</span>
             <span className="sidebar-status-value">
               <span className={`sidebar-status-dot ${healthStatus}`} />
-              <span>{healthStatus === 'ready' ? 'Ready (:8000)' : healthStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
+              <span>{healthStatus === 'ready' ? (import.meta.env.PROD ? 'Ready (Cloud)' : 'Ready (:8000)') : healthStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
             </span>
           </div>
           <div className="sidebar-status-row">
