@@ -1,21 +1,34 @@
 from pathlib import Path
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Optional, List
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 from pharmasense.llm.contracts import LLMProvider
 from pharmasense.tools.compound_similarity import compound_similarity_tool
 from pharmasense.agents.base import BaseAgent
-
-from typing import List
 
 class CandidateSummary(BaseModel):
     compound_id: str
     score: float
 
 class CompoundSimilarityAgentOutput(BaseModel):
-    top_candidates: List[CandidateSummary] = Field(..., description="List of top similar candidates and their scores.")
+    top_candidates: List[CandidateSummary] = Field(default_factory=list, description="List of top similar candidates and their scores.")
     explanation: str = Field(..., description="Explanation of the similarity.")
     coverage: float = Field(..., description="The coverage score of the comparison.")
+    score: float = Field(default=0.0, description="The calculated attribute similarity score.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_score_or_candidates(cls, data):
+        if isinstance(data, dict):
+            if "top_candidates" in data and data["top_candidates"] and "score" not in data:
+                c0 = data["top_candidates"][0]
+                if isinstance(c0, dict) and "score" in c0:
+                    data["score"] = float(c0["score"])
+                elif hasattr(c0, "score"):
+                    data["score"] = float(c0.score)
+            if "score" in data and "top_candidates" not in data:
+                data["top_candidates"] = []
+        return data
 
 class CompoundSimilarityAgent(BaseAgent):
     def run(self, prompt: str, single_tool_mode: bool = False) -> tuple[BaseModel, list[dict]]:
@@ -35,6 +48,7 @@ class CompoundSimilarityAgent(BaseAgent):
                             tool_calls=[],
                             parsed={
                                 "top_candidates": [],
+                                "score": 0.0,
                                 "explanation": "No valid comparison could be made due to missing data or attributes.",
                                 "coverage": 0.0
                             }
@@ -46,6 +60,7 @@ class CompoundSimilarityAgent(BaseAgent):
                         tool_calls=[],
                         parsed={
                             "top_candidates": [],
+                            "score": 0.0,
                             "explanation": "No valid comparison could be made due to missing data or attributes.",
                             "coverage": 0.0
                         }
@@ -58,6 +73,7 @@ class CompoundSimilarityAgent(BaseAgent):
             if "Agent exceeded max iterations" in str(e):
                 return CompoundSimilarityAgentOutput(
                     top_candidates=[],
+                    score=0.0,
                     explanation="No valid comparison could be made due to missing data or attributes.",
                     coverage=0.0
                 ), getattr(self, "executed_tools", [])

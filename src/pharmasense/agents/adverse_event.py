@@ -48,6 +48,10 @@ class AETriageAgent(BaseAgent):
             return super().run(prompt, single_tool_mode=False)
         except RuntimeError as e:
             if "Agent exceeded max iterations" in str(e):
+                if self.executed_tools:
+                    tool_names = [t["tool_name"] for t in self.executed_tools]
+                    if "ae_severity_classifier_tool" in tool_names or "escalation_notifier_tool" in tool_names:
+                        raise
                 return AETriageOutput(
                     explanation="No records found or search could not be executed.",
                     final_severity="Unknown",

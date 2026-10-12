@@ -90,6 +90,7 @@ class BaseAgent:
         ]
 
         self.executed_tools = []
+        self.last_error = None
         active_tools = self._tool_specs if self._tool_specs else None
 
         for _ in range(self.max_iterations):
@@ -119,6 +120,7 @@ class BaseAgent:
 
             except (LLMGatewayError, RuntimeError, ValueError) as e:
                 error_str = str(e)
+                self.last_error = error_str
                 if "Structured output parsing failed" in error_str or "Structured output is not valid JSON" in error_str or "Structured output failed schema validation" in error_str or "no valid parsed output" in error_str or "Finalization rejected" in error_str:
                     from pharmasense.llm.contracts import LLMInvalidOutputError
                     if isinstance(e, LLMInvalidOutputError) and getattr(e, "raw_content", None):
@@ -269,4 +271,5 @@ class BaseAgent:
                         )
                     )
 
-        raise RuntimeError(f"Agent exceeded max iterations ({self.max_iterations})")
+        err_detail = f": {self.last_error}" if getattr(self, "last_error", None) else ""
+        raise RuntimeError(f"Agent exceeded max iterations ({self.max_iterations}){err_detail}")

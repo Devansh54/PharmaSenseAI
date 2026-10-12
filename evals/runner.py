@@ -97,7 +97,11 @@ class EvaluationRunner:
                 def complete(self, req):
                     sys_p = req.messages[0].content.lower() if req.messages else ""
                     usr = req.messages[-1].content.lower() if req.messages else ""
-                    resp = LLMResponse(content="", usage=Usage(total_tokens=100, prompt_tokens=50, completion_tokens=50), cost=CostBreakdown(prompt_cost=0.001, completion_cost=0.001, total_cost=0.002))
+                    resp = LLMResponse(
+                        content="",
+                        usage=Usage(total_tokens=0, prompt_tokens=0, completion_tokens=0, is_estimated=False),
+                        cost=CostBreakdown(prompt_cost=0.0, completion_cost=0.0, total_cost=0.0, pricing_known=True, note="offline_mock")
+                    )
                     if "medical safety classifier" in usr:
                         if "diarrhea" in usr or "father" in usr or "ibuprofen" in usr:
                             resp.content = '{"is_medical_advice": true}'
@@ -385,43 +389,77 @@ class EvaluationRunner:
             f.write(f"**Total Cases Processed**: {len(results)} / {len(self.cases)}\n")
             f.write(f"**Execution Failure Rate**: {(failures/len(self.cases))*100:.1f}% ({failures} cases crashed or hit unhandled errors)\n")
             if len(results) > 0:
-                avg_latency = sum(r["latency"] for r in results) / len(results)
-                f.write(f"**Average Latency (processed cases)**: {avg_latency:.2f}s\n\n")
+                lats = sorted(r["latency"] for r in results)
+                avg_latency = sum(lats) / len(lats)
+                min_latency = lats[0]
+                max_latency = lats[-1]
+                p50_latency = lats[len(lats) // 2]
+                p90_idx = min(int(len(lats) * 0.9), len(lats) - 1)
+                p90_latency = lats[p90_idx]
+                f.write("## Latency Statistics (End-to-End Execution Time)\n")
+                f.write(f"- **Average Latency**: {avg_latency:.2f}s\n")
+                f.write(f"- **Min Latency**: {min_latency:.2f}s\n")
+                f.write(f"- **Max Latency**: {max_latency:.2f}s\n")
+                f.write(f"- **Median (P50) Latency**: {p50_latency:.2f}s\n")
+                f.write(f"- **P90 Latency**: {p90_latency:.2f}s\n\n")
 
-            try:
-                from sqlalchemy import text
-                res = self.session.execute(text("SELECT COUNT(*), SUM(prompt_tokens), SUM(completion_tokens) FROM runtime_events WHERE event_type='LLM'")).fetchone()
-                total_calls = res[0] or 0
-                prompt_tokens = res[1] or 0
-                comp_tokens = res[2] or 0
+            f.write("## Cost & Token Accounting\n")
+            if self.is_offline:
+                f.write("- **Execution Mode**: OFFLINE / PIPELINE STRUCTURAL VALIDATION MODE\n")
+                f.write("- **External Provider API Calls**: 0\n")
+                f.write("- **External API Spend**: $0.00 (Zero external API spend — offline mock mode)\n")
+                f.write("- **Tokens Incurred**: 0 external tokens (Offline mock adapter)\n\n")
+            else:
+                f.write(f"- **Execution Mode**: LIVE LLM EVALUATION MODE (Provider: {self.provider_name}, Model: {self.model_name})\n")
+                try:
+                    from sqlalchemy import text
+                    from pharmasense.config import DEFAULT_PRICING
+                    res = self.session.execute(text("SELECT COUNT(*), SUM(prompt_tokens), SUM(completion_tokens), SUM(total_cost) FROM runtime_events WHERE event_type='LLM'")).fetchone()
+                    total_calls = res[0] or 0
+                    prompt_tokens = res[1] or 0
+                    comp_tokens = res[2] or 0
+                    logged_cost = res[3]
 
-                err_res = self.session.execute(text("SELECT COUNT(*) FROM runtime_events WHERE event_type='LLM' AND status='ERROR'")).scalar() or 0
+                    err_res = self.session.execute(text("SELECT COUNT(*) FROM runtime_events WHERE event_type='LLM' AND status='ERROR'")).scalar() or 0
 
-                f.write("## Telemetry & Accounting\n")
-                f.write(f"- **Total LLM Calls**: {total_calls} ({total_calls - err_res} successful, {err_res} retries/errors)\n")
-                f.write(f"- **Total Tokens**: {prompt_tokens + comp_tokens} ({prompt_tokens} prompt, {comp_tokens} completion)\n\n")
-            except Exception as e:
-                f.write(f"*(Telemetry metrics unavailable: {e})*\n\n")
+                    f.write(f"- **Total LLM Calls**: {total_calls} ({total_calls - err_res} successful, {err_res} retries/errors)\n")
+                    f.write(f"- **Total Tokens**: {prompt_tokens + comp_tokens} ({prompt_tokens} prompt, {comp_tokens} completion)\n")
 
-            f.write("## Aggregate Metrics\n")
+                    rates = DEFAULT_PRICING.get(self.model_name)
+                    if rates is not None:
+                        calc_prompt_cost = (prompt_tokens / 1000.0) * rates.get("prompt", 0.0)
+                        calc_comp_cost = (comp_tokens / 1000.0) * rates.get("completion", 0.0)
+                        total_calc_cost = calc_prompt_cost + calc_comp_cost
+                        f.write(f"- **Calculated External Spend**: ${total_calc_cost:.6f} (${calc_prompt_cost:.6f} prompt, ${calc_comp_cost:.6f} completion)\n\n")
+                    elif logged_cost is not None and logged_cost > 0.0:
+                        f.write(f"- **Recorded External Spend**: ${logged_cost:.6f}\n\n")
+                    else:
+                        f.write(f"- **External Spend**: Pricing unavailable for model '{self.model_name}' (marked as N/A without fabrication)\n\n")
+                except Exception as e:
+                    f.write(f"*(Telemetry metrics unavailable: {e})*\n\n")
+
+            f.write("## Aggregate Accuracy & Quality Metrics\n")
             f.write("*(Note: Execution failures receive 0 or N/A. Denominators reflect the number of applicable cases for each metric.)*\n\n")
-            f.write(f"- Correctness: {safe_sum(results, 'correctness')}\n")
-            f.write(f"- Faithfulness: {safe_sum(results, 'faithfulness')}\n")
-            f.write(f"- Relevance: {safe_sum(results, 'relevance')}\n")
-            f.write(f"- Citation Correctness: {safe_sum(results, 'citation')}\n")
-            f.write(f"- Retrieval Hit@K: {safe_sum(results, 'hit_at_k')}\n")
+            f.write(f"- Deterministic Assertions Pass Rate: {safe_sum(results, 'correctness')}\n")
             f.write(f"- Routing Accuracy: {safe_sum(results, 'routing')}\n")
             f.write(f"- Tool Selection Accuracy: {safe_sum(results, 'tools')}\n")
             f.write(f"- SQL Correctness: {safe_sum(results, 'sql')}\n")
-            f.write(f"- Escalation Accuracy: {safe_sum(results, 'escalation')}\n\n")
+            f.write(f"- Escalation Accuracy: {safe_sum(results, 'escalation')}\n")
+            f.write(f"- Citation Correctness: {safe_sum(results, 'citation')}\n")
+            f.write(f"- Retrieval Hit@K: {safe_sum(results, 'hit_at_k')}\n")
+            f.write(f"- Faithfulness (LLM Judge): {safe_sum(results, 'faithfulness')}\n")
+            f.write(f"- Relevance (LLM Judge): {safe_sum(results, 'relevance')}\n\n")
+            f.write("> [!NOTE]\n")
+            f.write("> Deterministic pass rates and fixture matching verify pipeline orchestration and contract adherence on synthetic test data. They do not constitute clinical validation or real-world safety certification.\n\n")
 
             f.write("## Detailed Results\n")
-            f.write("| Case ID | Correctness | Faithfulness | Relevance | Routing | Hit@K | Latency (s) |\n")
-            f.write("|---------|-------------|--------------|-----------|---------|-------|-------------|\n")
+            f.write("| Case ID | Correctness | Faithfulness | Relevance | Routing | Hit@K | Latency (s) | Spend |\n")
+            f.write("|---------|-------------|--------------|-----------|---------|-------|-------------|-------|\n")
             for r in results:
                 f_val = r['faithfulness'] if r['faithfulness'] is not None else "N/A"
                 r_val = r['relevance'] if r['relevance'] is not None else "N/A"
-                f.write(f"| {r['case_id']} | {r['correctness']} | {f_val} | {r_val} | {r['routing']} | {r['hit_at_k']} | {r['latency']:.2f} |\n")
+                spend_val = "$0.00 (offline)" if self.is_offline else "Recorded"
+                f.write(f"| {r['case_id']} | {r['correctness']} | {f_val} | {r_val} | {r['routing']} | {r['hit_at_k']} | {r['latency']:.2f} | {spend_val} |\n")
 
         print(f"Evaluation complete. Report generated at {REPORT_PATH}")
 

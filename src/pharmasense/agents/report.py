@@ -165,9 +165,19 @@ class ReportWriterAgent(BaseAgent):
                         if "chunk_id" in c:
                             valid_chunk_ids.add(c["chunk_id"])
             
+            def _is_valid_citation(c: dict) -> bool:
+                if not isinstance(c, dict):
+                    return False
+                if c.get("chunk_id") in valid_chunk_ids:
+                    return True
+                c_list = c.get("citations", [])
+                if isinstance(c_list, list) and any(cid in valid_chunk_ids for cid in c_list):
+                    return True
+                return False
+
             output_obj.citations_resolved = [
                 c for c in output_obj.citations_resolved
-                if c.get("chunk_id") in valid_chunk_ids
+                if _is_valid_citation(c)
             ]
 
 def create_report_writer_agent(session: Session, llm: LLMProvider) -> BaseAgent:

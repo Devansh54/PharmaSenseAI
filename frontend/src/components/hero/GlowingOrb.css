@@ -1,0 +1,109 @@
+.glowing-orb-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 28px auto;
+  width: 140px;
+  height: 140px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Ambient glow diffusing outwards */
+.glowing-orb-aura {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.4) 0%, rgba(82, 123, 255, 0.18) 40%, transparent 70%);
+  filter: blur(40px);
+  animation: orb-pulse-light 5s ease-in-out infinite;
+  z-index: 1;
+}
+
+/* Secondary outer flare */
+.glowing-orb-flare {
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(192, 132, 252, 0.35) 0%, rgba(147, 51, 234, 0.15) 50%, transparent 75%);
+  filter: blur(24px);
+  z-index: 2;
+}
+
+/* Core sphere */
+.glowing-orb-core {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  background: var(--gradient-orb);
+  box-shadow: var(--shadow-orb);
+  animation: orb-breathe 4s ease-in-out infinite;
+  z-index: 3;
+  overflow: hidden;
+}
+
+/* Inner specular highlight reflection */
+.glowing-orb-highlight {
+  position: absolute;
+  top: 10px;
+  left: 18px;
+  width: 48px;
+  height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.6) 0%, rgba(243, 232, 255, 0.2) 60%, transparent 100%);
+  transform: rotate(-25deg);
+  filter: blur(2px);
+}
+
+/* Subtle ring orbit accent */
+.glowing-orb-ring {
+  position: absolute;
+  width: 132px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(192, 132, 252, 0.22);
+  transform: rotate(-18deg);
+  filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.3));
+  z-index: 2;
+}
+
+@media (max-width: 768px) {
+  .glowing-orb-wrapper {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 20px;
+  }
+
+  .glowing-orb-aura {
+    width: 150px;
+    height: 150px;
+    filter: blur(30px);
+  }
+
+  .glowing-orb-flare {
+    width: 110px;
+    height: 110px;
+    filter: blur(16px);
+  }
+
+  .glowing-orb-core {
+    width: 74px;
+    height: 74px;
+  }
+
+  .glowing-orb-highlight {
+    top: 7px;
+    left: 12px;
+    width: 34px;
+    height: 20px;
+  }
+
+  .glowing-orb-ring {
+    width: 96px;
+    height: 36px;
+  }
+}

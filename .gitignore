@@ -13,3 +13,8 @@ provenance/*.json
 # Evaluation artifacts
 evals/.cache/
 docs/evaluation_report.md
+
+# Environment and Node dependencies
+.env
+.env.*
+node_modules/

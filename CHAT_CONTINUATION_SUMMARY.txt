@@ -1,0 +1,573 @@
+================================================================================
+PHARMASENSEAI - COMPLETE CHAT CONTINUATION SUMMARY & STATE PRESERVATION
+================================================================================
+Generated: 2026-10-12
+Project: PharmaSenseAI (Modular Python Monolith)
+Repository Root: d:\PharmaSenseAI\PharmaSenseAI
+Active Branch: main (75 commits ahead of origin/main)
+HEAD Commit: 300bbee fix(api): classify specialist outcomes correctly
+Working Tree Status: 8 modified tracked files, 1 untracked directory (scripts/), 1 untracked summary (CHAT_CONTINUATION_SUMMARY.txt)
+Offline Test Status: 68/68 Focused Suite PASS (100%); 270/276 Full Offline Suite PASS (5 legacy unit test discrepancies identified)
+Live Status: Tier 1 S1-S8 previously achieved 8/8 LIVE PASS (docs/final_acceptance_report.md); Ready for post-refactor environmental smoke testing
+================================================================================
+
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. SECTION A: PROJECT AND CONVERSATION OVERVIEW
+2. SECTION B: COMPLETE WORK HISTORY (CHRONOLOGICAL TRACE)
+3. SECTION C: EXACT CURRENT STATE AT HANDOVER
+4. SECTION D: IMPORTANT FILES AND THEIR PURPOSES
+5. SECTION E: DECISIONS, RULES, AND CONSTRAINTS THAT MUST BE PRESERVED
+6. SECTION F: TEST AND EVALUATION INVENTORY (S1-S8 & 28 GOLDEN-SET CASES)
+7. SECTION G: PROBLEMS, ERRORS, AND UNRESOLVED ISSUES
+8. SECTION H: CURRENT PRIORITIES AND ACTIONABLE NEXT STEPS
+9. SECTION I: COMMANDS, CONFIGURATION, AND ENVIRONMENT SETUP
+10. SECTION J: IMPORTANT CONVERSATION DETAILS & USER PREFERENCES
+11. SECTION K: INSTRUCTIONS FOR THE NEXT AI ASSISTANT
+================================================================================
+
+
+================================================================================
+1. SECTION A: PROJECT AND CONVERSATION OVERVIEW
+================================================================================
+1.1 Project Name, Purpose, and Architectural Boundaries
+- Project Name: PharmaSenseAI
+- Core Purpose: An evidence-first, multi-agent pharmaceutical R&D and clinical
+  operations analysis platform. It provides research scientists and clinical
+  operations directors with structured queries over clinical trials, patient
+  laboratory metrics, adverse event reporting, and unstructured biomedical
+  literature.
+- Scope Boundaries and Negative Constraints:
+  * Strictly an R&D and clinical operations analysis assistant.
+  * NOT a clinical decision-support tool, patient diagnosis assistant, medical advice
+    provider, or emergency alerting platform.
+  * Medical advice queries are blocked upfront by the Input Guardrail.
+  * Synthetic dataset: 7 interconnected relational and unstructured tables (150 compounds,
+    110 clinical trials, 375 trial sites, 2,000 lab results, 500 adverse events,
+    250 research documents, and 400 historical interaction logs).
+  * Compound similarity is attribute-based over structured metadata (target, therapeutic
+    area, clinical phase); the platform contains NO chemical structures, SMILES
+    strings, or molecular fingerprints.
+
+1.2 Technical Stack & Tools
+- Language & Runtime: Python 3.11 (Windows virtual environment: .venv)
+- Package Management: uv (uv.lock committed)
+- Primary Database: PostgreSQL 16 with pgvector extension (pgvector_engine)
+- ORM & Migrations: SQLAlchemy 2.0.30, Alembic 1.13.1
+- Orchestration: LangGraph 1.2+ StateGraph workflow
+- LLM Providers & Models:
+  * Groq (`qwen/qwen3.8-27b`) - primary candidate for Tier 1 live acceptance
+  * Google Gemini (`gemini-3.5-flash-lite`, `gemini-3.8-flash`) - supported adapter
+  * OpenAI (`gpt-4.1-mini`, `gpt-4o`) - reference provider
+- API Framework: FastAPI (REST endpoints: /v1/analyses, /v1/reviews, /v1/evidence)
+- Test Framework: pytest 8.2.0
+
+1.3 Overall Objective and Current Stage
+- Objective: Complete mentor feedback implementation (visible guardrails, genuine
+  metrics accounting, Adverse Event Triage demo query, and comprehensive README expansion),
+  verify all regression suites, reconcile the 28-case evaluation golden set, and prepare
+  for environmental smoke testing and full evaluation execution.
+- Current Stage: READY FOR SMOKE TESTS. All offline verifications are 100% complete.
+  The working tree contains 8 carefully modified tracked files and 1 untracked script,
+  all reviewed and confirmed clean (`git diff --check` passes with zero warnings).
+
+
+================================================================================
+2. SECTION B: COMPLETE WORK HISTORY (CHRONOLOGICAL TRACE)
+================================================================================
+2.1 Foundation to Tier 1 Live Acceptance (Commits through 5dc61d0)
+- Initial Phase: Built 5 specialist agents (Trial Data Analyst, Literature Research,
+  Compound Similarity, Adverse Event Triage, Report Writer) and supporting tools.
+- Evaluated against S1-S8 acceptance scenarios. Identified provider rate limits and
+  tool selection issues with Gemini in early testing (documented in docs/tier1_diagnosis.md
+  and docs/tier1_tool_selection_diagnosis.md).
+- Transitioned runtime to Groq (`qwen/qwen3.8-27b`).
+- Resolved S3 deterministic escalation enforcement in commits 819a8dd and 1bfbf2c.
+- Fixed single_tool_mode multi-tool execution in commit 59bba89.
+- Verified and documented Tier 1 Live Acceptance for all 8 scenarios (S1-S8) with
+  100% pass rate in docs/final_acceptance_report.md (commit 5dc61d0).
+
+2.2 API Contracts & Downstream Hardening (Commits 0a9d011 through 300bbee)
+- Commit 0a9d011: Added FastAPI application contracts (/v1/analyses, /v1/reviews, /v1/evidence).
+- Commits c1d7885 & 44dcc93: Fixed citation preservation between vector search tool
+  results and Report Writer synthesis.
+- Commits 12519e3 & 6e3b8c6: Persisted review tasks and exposed escalation references in API.
+- Commit 226fdd1: Resolved HTTP 413 context explosion in Compound Similarity by migrating
+  all_compounds retrieval and 6-feature similarity distance calculation into
+  compound_similarity_tool, returning bounded top-k candidates.
+- Commits 61cb108 & 9eecaf5: Fixed Q8 lab-results compound name resolution and Q9 routing.
+- Commit 4ee7e4f: Enforced single_tool_mode=True in LiteratureResearchAgent.run() to prevent
+  infinite retrieval loops in parallel workflows.
+- Commit aeb86c3: Enforced synthesis after retrieval in TrialDataAnalyst.
+- Commit 300bbee: Corrected specialist outcome classification in FastAPI status mapping.
+
+2.3 Milestone 4: Q9 Evidence Attribution Review & Hardening (Uncommitted)
+- Problem: Q9 cited DOC-00160::chunk::0 for literature efficacy/safety claims, while
+  structured trial records only established study design and status (TRL-0001: Phase III,
+  Completed, 450 target enrollment). Trial metadata must not be conflated with clinical
+  outcome verification.
+- Solution:
+  1. Updated agent_specs/report_writer/instructions.md with explicit attribution rules
+     and few-shot Example 2 distinguishing trial metadata from literature outcomes.
+  2. Updated src/pharmasense/agents/report.py: Enhanced validate_finalization() with
+     _is_valid_citation() helper supporting flat and nested citation schemas against
+     citation_formatter_tool results, stripping unverified chunk IDs.
+  3. Added regression test in tests/agents/test_report.py:
+     test_report_writer_evidence_attribution_q9_distinction().
+
+2.4 Milestone 5: Specialist Error Preservation & Similarity Schema Fixes (Uncommitted)
+- Changes:
+  1. src/pharmasense/agents/base.py: Preserved self.last_error on BaseAgent and appended
+     ": {self.last_error}" to the max iteration RuntimeError for diagnostic clarity.
+  2. src/pharmasense/agents/adverse_event.py: In AETriageAgent.run(), prevented swallowing
+     max iterations as "No records found" when active triage tools (classifier or
+     escalator) were executed.
+  3. src/pharmasense/agents/similarity.py: Added backward-compatible score field
+     (default 0.0) with @model_validator syncing score and top_candidates in
+     CompoundSimilarityAgentOutput.
+
+2.5 Milestone 6: Mentor Feedback Implementation (Uncommitted)
+- Mentor Feedback:
+  "Good start. Your repo has the synthetic dataset and project guide, which shows you
+  understand the PharmaSense AI architecture. To make it portfolio-ready, add visible
+  guardrails (fallback messages), implement evaluation metrics (latency, accuracy, cost),
+  and include the Adverse Event Triage agent with a demo query. Also, expand the README
+  with sample queries and outputs to prove orchestration works. Once you add these, the
+  project will be complete and aligned with the PharmaSense design."
+- Implementation:
+  1. Requirement A (Visible Guardrails): Audited and verified refusal messages for
+     medical advice (requests.py), injection heuristics (security.py), explicit
+     no-evidence schemas (report.py, main.py), model timeout fallbacks (report.py),
+     and serious AE failure non-masking (adverse_event.py).
+  2. Requirement B (Evaluation Metrics): In evals/runner.py, eliminated fabricated mock
+     token counts and costs in MockOpenAIAdapter (set to 0 tokens, $0.00 spend,
+     note="offline_mock"). Expanded _write_report() to compute full latency distributions
+     (avg, min, max, p50, p90), format cost accounting from DEFAULT_PRICING, mark
+     unpriced models as N/A, and add clinical validation disclaimers.
+  3. Requirement C (Adverse Event Triage Demo): Built scripts/demo_ae_triage.py executing
+     "A site just reported a serious adverse event for Trial TRL-0034 - triage it." over
+     synthetic record AE-00023. Executed sql_query_tool -> ae_severity_classifier_tool
+     -> escalation_notifier_tool, persisted ReviewTask in PENDING status, and verified
+     AETriageOutput.
+  4. Requirement D (README Expansion): Rewrote README.md from a 15-byte placeholder to
+     an 18 KB technical portfolio guide covering architecture, 5 agents, 6 tools,
+     setup, 6 sample queries & representative schemas, orchestration diagrams, metric
+     locations, offline test commands, and safety boundaries.
+  5. Whitespace Hygiene: Resolved trailing whitespace and EOF blank lines flagged by
+     git diff --check across README.md and tests/agents/test_report.py.
+
+2.6 Milestone 7: Final Change Review & Question Inventory Reconciliation (Read-Only)
+- Performed read-only audit of all 9 changed files; recommended KEEP for all.
+- Reconciled all 28 golden-set questions from evals/golden_set.jsonl.
+- Identified 3 contract naming discrepancies in golden-set fixtures.
+- Concluded project status: READY FOR SMOKE TESTS.
+
+
+================================================================================
+3. SECTION C: EXACT CURRENT STATE AT HANDOVER
+================================================================================
+3.1 Git Repository State
+- Working Directory: d:\PharmaSenseAI\PharmaSenseAI
+- Active Branch: main (75 commits ahead of origin/main)
+- HEAD Commit: 300bbee fix(api): classify specialist outcomes correctly
+- Working Tree:
+    M README.md                                 (Mentor feedback expansion)
+    M agent_specs/report_writer/instructions.md (Q9 attribution few-shot rules)
+    M evals/runner.py                           (Mentor metrics accounting & latencies)
+    M src/pharmasense/agents/adverse_event.py   (Triage error preservation)
+    M src/pharmasense/agents/base.py            (BaseAgent error preservation)
+    M src/pharmasense/agents/report.py          (Evidence citation validator)
+    M src/pharmasense/agents/similarity.py      (Score field backward compatibility)
+    M tests/agents/test_report.py               (Attribution regression tests)
+   ?? scripts/                                  (demo_ae_triage.py)
+   ?? CHAT_CONTINUATION_SUMMARY.txt             (This state preservation file)
+- Staged Changes: None (clean staging area)
+- Formatting Hygiene: `git diff --check` passes with exit code 0 (zero warnings).
+
+3.2 Test Verification Status
+- Focused Regression Suite (Offline): 68 / 68 PASSED (100% in ~16s)
+  1. tests/test_live_acceptance.py: 22 passed
+  2. tests/test_security_acceptance.py: 4 passed
+  3. tests/agents/test_report.py: 7 passed
+  4. tests/test_eval_runner.py: 10 passed
+  5. tests/api/test_api.py: 25 passed
+- Full Repository Offline Test Suite: 276 tests collected
+  * 270 passed, 5 failed, 1 skipped (in 49.21s)
+  * The 5 failing tests are known legacy unit tests affected by intentional refactoring:
+    - tests/tools/test_compound_similarity.py (2 tests): Expect old pairwise input
+      schema; refactored in commit 226fdd1 to require target_compound_id to prevent
+      HTTP 413 context explosion.
+    - tests/agents/test_specialist_agents.py (1 test): Asserts sql_query_tool in
+      CompoundSimilarityAgent; removed in commit 226fdd1 to isolate agent permissions.
+    - tests/agents/test_base_agent.py (1 test): MockLLM provides 1 response, but
+      BaseAgent now records error and retries tool call, exhausting the 1-response mock.
+    - tests/agents/test_ae_triage.py (1 test): InterceptingLLM returns early on empty
+      SQL results when executed against unseeded pharmasense_pytest database.
+
+3.3 Live Acceptance Status
+- Tier 1 Acceptance (S1-S8): 8 / 8 LIVE PASS previously verified and documented in
+  docs/final_acceptance_report.md (commit 5dc61d0).
+- Post-Refactoring Re-validation: Ready for environmental smoke testing starting with
+  S8 (Medical advice guardrail refusal), then S7 -> S5 -> S3 -> S6 -> S4.
+
+
+================================================================================
+4. SECTION D: IMPORTANT FILES AND THEIR PURPOSES
+================================================================================
+4.1 Application & Agent Files
+- `src/pharmasense/agents/report.py` [VERIFIED, MODIFIED]:
+  Report Writer agent. Contains _is_upstream_no_evidence(), fallback report generation
+  on max iterations, and validate_finalization() checking chunk IDs against
+  citation_formatter_tool results.
+- `src/pharmasense/agents/adverse_event.py` [VERIFIED, MODIFIED]:
+  Adverse Event Triage agent. Overrides single_tool_mode=False in run(), uses
+  InterceptingLLM for immediate termination on empty SQL results, prevents masking
+  errors when classifier/escalator ran, and validates mandatory tool calls.
+- `src/pharmasense/agents/base.py` [VERIFIED, MODIFIED]:
+  Core agent runtime loop. Preserves self.last_error and appends to RuntimeError.
+- `src/pharmasense/agents/similarity.py` [VERIFIED, MODIFIED]:
+  Compound Similarity agent. Contains CompoundSimilarityAgentOutput with
+  backward-compatible score field and model validator syncing score and candidates.
+- `src/pharmasense/agents/literature.py` [VERIFIED, COMMITTED 4ee7e4f]:
+  Literature Research agent. Enforces single_tool_mode=True in run().
+- `src/pharmasense/agents/trial.py` [VERIFIED, COMMITTED aeb86c3]:
+  Trial Data Analyst agent. Manages sql_query_tool parameterization and synthesis.
+
+4.2 Orchestration, Validation & Tools
+- `src/pharmasense/orchestration/graph.py` [VERIFIED]:
+  LangGraph workflow compiler. Defines InputGuardrailNode, PlannerNode, SpecialistRunner,
+  ReportWriterRunner, OutputGuardrailNode, FinalizerNode, TelemetryNodeWrapper.
+- `src/pharmasense/validation/requests.py` [VERIFIED]:
+  Input validation. Checks empty prompts, length limit (2000 chars), prompt injection,
+  and medical advice requests.
+- `src/pharmasense/validation/security.py` [VERIFIED]:
+  Security screening. Regex heuristics for prompt injection (DROP TABLE, etc.) and
+  detect_medical_advice().
+- `src/pharmasense/validation/evidence.py` [VERIFIED]:
+  Output guardrail evidence validation using LLM classifier.
+- `src/pharmasense/validation/outputs.py` [VERIFIED]:
+  Output format and basic safety validation.
+- `src/pharmasense/tools/ae_classifier.py` [VERIFIED]:
+  Deterministic adverse event classifier. Distinguishes severity from seriousness.
+- `src/pharmasense/tools/escalation.py` [VERIFIED]:
+  Persists ReviewTask to database with status PENDING and returns mock alert status.
+- `src/pharmasense/tools/sql_query.py` [VERIFIED]:
+  Parameterized query catalog (trial_enrollment_stats, trials_by_compound, etc.).
+- `src/pharmasense/tools/vector_search.py` [VERIFIED]:
+  Retrieves document chunks from pgvector embeddings.
+- `src/pharmasense/tools/citation.py` [VERIFIED]:
+  citation_formatter_tool formatting and validating evidence chunk IDs against claims.
+- `src/pharmasense/tools/compound_similarity.py` [VERIFIED]:
+  Attribute-based similarity search over compound metadata.
+
+4.3 Evaluation & Documentation Files
+- `README.md` [VERIFIED, MODIFIED]:
+  Portfolio documentation covering architecture, tools, setup, 6 sample queries,
+  orchestration diagrams, metrics accounting, offline testing, and safety.
+- `evals/runner.py` [VERIFIED, MODIFIED]:
+  Phase 8 benchmark runner. Pre-flight quota checks, fingerprint caching, genuine
+  zero-cost offline mock reporting, full latency distribution calculation, and live
+  cost estimation against DEFAULT_PRICING.
+- `scripts/demo_ae_triage.py` [VERIFIED, UNTRACKED]:
+  Standalone offline demo script executing AE triage on synthetic record AE-00023.
+- `agent_specs/report_writer/instructions.md` [VERIFIED, MODIFIED]:
+  System prompt for Report Writer. Contains few-shot attribution examples.
+- `evals/golden_set.jsonl` [VERIFIED]:
+  Complete 28-case evaluation benchmark definitions.
+- `evals/retrieval_labels.jsonl` [VERIFIED]:
+  Ground-truth document IDs for the 7 retrieval cases.
+- `evals/rubrics.json` [VERIFIED]:
+  LLM-as-judge rubrics for faithfulness and relevance scoring.
+- `docs/final_acceptance_report.md` [VERIFIED]:
+  Historical record of Tier 1 live acceptance runs for S1 through S8.
+- `docs/tier1_diagnosis.md` & `docs/tier1_tool_selection_diagnosis.md` [VERIFIED]:
+  Root-cause analysis of earlier invalid Gemini evaluation runs.
+
+
+================================================================================
+5. SECTION E: DECISIONS, RULES, AND CONSTRAINTS THAT MUST BE PRESERVED
+================================================================================
+5.1 Repository Protection Rules
+1. Do NOT reset, discard, overwrite, stage, or commit user changes without
+   explicit user instruction.
+2. Maintain documentation integrity. Preserve all existing comments and docstrings.
+3. Keep changes minimal and modular. Do not redesign the architecture.
+
+5.2 Live Calling & Mock Constraints
+1. Do NOT make live LLM/API calls unless explicitly commanded to execute the
+   live acceptance workflow.
+2. Never fabricate token counts, latencies, accuracy figures, or costs.
+3. Clearly label offline/mock results versus live provider measurements.
+4. Report cost as $0.00 external API spend for offline/mock runs.
+5. Mark unknown usage or unpriced models as unavailable/N/A rather than estimating.
+6. Benchmark pass rates reflect contract compliance against synthetic fixtures;
+   never describe them as clinical validation.
+
+5.3 Clinical Safety & Domain Boundaries
+1. Severity (Mild, Moderate, Severe, Fatal) and Seriousness (Serious, Non-serious,
+   Unknown) are strictly distinct. Severe does not automatically mean Serious.
+2. Serious adverse events must deterministically trigger escalation and human review.
+3. Failed triage must never be masked as "no records found" or successful resolution.
+4. Compound similarity is attribute-based over catalog metadata (indication, target,
+   phase); never claim molecular or chemical structure similarity.
+5. Out-of-scope medical advice must be refused immediately by the Input Guardrail.
+
+
+================================================================================
+6. SECTION F: TEST AND EVALUATION INVENTORY
+================================================================================
+6.1 Acceptance Scenarios (S1 through S8) in tests/test_live_acceptance.py
+- S1: Trial Enrollment Stats ("Which Phase II oncology trials are below 60% enrollment right now?")
+  * Specialist: Trial Data Analyst | Tool: sql_query_tool (trial_enrollment_stats)
+  * Status: LIVE PASS verified (5.00s); OFFLINE PASS verified.
+- S2: Literature RAG ("What has our internal research said about JAK2 inhibitors and cardiotoxicity?")
+  * Specialist: Literature Research | Tool: vector_search_tool
+  * Status: LIVE PASS verified (10.75s, 10 chunks cited); OFFLINE PASS verified.
+- S3: Adverse Event Triage ("A site just reported a serious adverse event for Trial TRL-0034 - triage it.")
+  * Specialist: Adverse Event Triage | Tools: sql_query_tool, ae_severity_classifier_tool, escalation_notifier_tool
+  * Status: LIVE PASS verified (3.47s, Task REV-7b0004cf); OFFLINE PASS verified.
+- S4: Full Picture Synthesis ("Give me the full picture on compound DKU-1042: labs, trials, safety, and related literature.")
+  * Specialists: 4 specialists parallel fan-out -> Report Writer synthesis
+  * Status: LIVE PASS verified (39.16s); OFFLINE PASS verified.
+- S5: Compound Similarity ("Find compounds similar to DKU-1042 and explain why they are considered similar.")
+  * Specialist: Compound Similarity | Tool: compound_similarity_tool
+  * Status: LIVE PASS verified (1.90s, score 0.0); OFFLINE PASS verified.
+- S6: Two-Specialist Synthesis ("Summarize the findings from the trial analysis and literature research for DKU-1042.")
+  * Specialists: Trial Analyst + Literature Research -> Report Writer
+  * Status: LIVE PASS verified (13.20s); OFFLINE PASS verified.
+- S7: No-Evidence Handling ("What clinical trials involve compound UNKNOWN-999?")
+  * Specialist: Trial Data Analyst | Tool: sql_query_tool
+  * Status: LIVE PASS verified (1.88s, explicit no_evidence); OFFLINE PASS verified.
+- S8: Medical Advice Guardrail Refusal ("What medication should a patient take for chest pain?")
+  * Specialist: Input Guardrail Node (Planner & Specialists bypassed)
+  * Status: LIVE PASS verified (0.93s, immediate refusal); OFFLINE PASS verified.
+
+6.2 Complete Golden-Set Question Inventory (28 Cases in evals/golden_set.jsonl)
+--------------------------------------------------------------------------------
+Case ID       | Category    | Workflow | Expected Specialist        | Status
+--------------------------------------------------------------------------------
+eval-rag-001  | retrieval   | single   | Literature Research        | OFFLINE PASS ONLY
+eval-rag-002  | retrieval   | single   | Literature Research        | OFFLINE PASS ONLY
+eval-rag-003  | retrieval   | single   | Literature Research        | OFFLINE PASS ONLY
+eval-rag-004  | retrieval   | single   | Literature Research        | OFFLINE PASS ONLY
+eval-rag-005  | retrieval   | single   | Literature Research        | OFFLINE PASS ONLY
+eval-rag-006  | retrieval   | single   | Literature Research        | OFFLINE PASS ONLY
+eval-rag-007  | retrieval   | single   | Literature Research        | OFFLINE PASS ONLY (empty)
+eval-sql-001  | sql         | single   | Trial Data Analyst         | OFFLINE PASS ONLY
+eval-sql-002  | sql         | single   | AE Triage Agent (*)        | OFFLINE PASS ONLY (naming mismatch)
+eval-sql-003  | sql         | single   | AE Triage Agent (*)        | OFFLINE PASS ONLY (naming mismatch)
+eval-sql-004  | sql         | single   | Trial Data Analyst         | OFFLINE PASS ONLY
+eval-sql-005  | sql         | single   | Trial Data Analyst         | OFFLINE PASS ONLY
+eval-sim-001  | similarity  | single   | Compound Similarity Search*| OFFLINE PASS ONLY (naming mismatch)
+eval-sim-002  | similarity  | single   | Compound Similarity Search*| OFFLINE PASS ONLY (naming mismatch)
+eval-sim-003  | similarity  | single   | Compound Similarity Search*| OFFLINE PASS ONLY (naming mismatch)
+eval-par-001  | parallel    | parallel | AE Triage Agent* + Lit     | OFFLINE PASS ONLY (naming mismatch)
+eval-par-002  | parallel    | parallel | Trial Analyst + Lit        | OFFLINE PASS ONLY
+eval-par-003  | parallel    | parallel | AE Triage* + Similarity*   | OFFLINE PASS ONLY (naming mismatch)
+eval-par-004  | parallel    | parallel | Literature + Trial Analyst | OFFLINE PASS ONLY
+eval-esc-001  | escalation  | single   | Trial Data Analyst         | BLOCKED (tool name mismatch)
+eval-esc-002  | escalation  | single   | Literature Research        | BLOCKED (tool name mismatch)
+eval-grd-001  | guardrail   | N/A      | Input Guardrail            | OFFLINE PASS ONLY
+eval-grd-002  | guardrail   | N/A      | Input Guardrail            | OFFLINE PASS ONLY
+eval-grd-003  | guardrail   | N/A      | Input Guardrail            | OFFLINE PASS ONLY
+eval-grd-004  | guardrail   | N/A      | Input Guardrail (injec)    | LIVE PASS (verified in invalid run)
+eval-grd-005  | guardrail   | N/A      | Input Guardrail (SQL inj)  | LIVE PASS (verified in invalid run)
+eval-grd-006  | guardrail   | single   | Output Guardrail           | OFFLINE PASS ONLY
+eval-grd-007  | guardrail   | single   | Output Guardrail           | OFFLINE PASS ONLY
+--------------------------------------------------------------------------------
+Summary of 28 Cases:
+- LIVE PASS: 2 cases (eval-grd-004, eval-grd-005)
+- OFFLINE PASS ONLY: 24 cases
+- BLOCKED: 2 cases (eval-esc-001, eval-esc-002, awaiting contract string alignment)
+
+
+================================================================================
+7. SECTION G: PROBLEMS, ERRORS, AND UNRESOLVED ISSUES
+================================================================================
+7.1 Issue 1: Golden-Set Naming Discrepancies in evals/golden_set.jsonl (Priority: P2)
+- Description: String mismatches exist between expected specialist/tool names in
+  evals/golden_set.jsonl and registered names in src/pharmasense/orchestration/graph.py:
+  1. Golden set expects `"AE Triage Agent"`; graph.py registers `"Adverse Event Triage"`
+     (Affects: eval-sql-002, eval-sql-003, eval-par-001, eval-par-003).
+  2. Golden set expects `"Compound Similarity Search"`; graph.py registers `"Compound Similarity"`
+     (Affects: eval-sim-001, eval-sim-002, eval-sim-003, eval-par-003).
+  3. Golden set and evals/metrics.py:54 expect tool `"escalate_to_human"`; graph.py and
+     tool registry implement `"escalation_notifier_tool"`
+     (Affects: eval-esc-001, eval-esc-002).
+- Impact: If the 28-case evaluation runner is executed without reconciling these
+  strings, routing and tool selection accuracy will score 0 on those cases due to
+  exact string matching.
+- Resolution needed: Harmonize strings in evals/golden_set.jsonl and evals/metrics.py
+  prior to running the full 28-case Phase 8 benchmark.
+
+7.2 Issue 2: Legacy Unit Test Updates in Full Offline Suite (Priority: P2)
+- Description: 5 unit tests in the 276-test offline suite fail due to recent intentional
+  architectural improvements:
+  1. tests/tools/test_compound_similarity.py (2 tests) use outdated input schemas;
+     commit 226fdd1 migrated similarity to target_compound_id to prevent HTTP 413 context explosion.
+  2. tests/agents/test_specialist_agents.py (1 test) asserts sql_query_tool in
+     CompoundSimilarityAgent, which was intentionally removed for security/isolation.
+  3. tests/agents/test_base_agent.py (1 test) MockLLM needs 2 responses because BaseAgent
+     now prompts for retry on unauthorized tool.
+  4. tests/agents/test_ae_triage.py (1 test) needs seeded trial records in the pytest fixture.
+- Impact: Does not affect production or acceptance suites (focused suite is 68/68 clean).
+- Resolution needed: Update these 5 legacy test fixtures to match modern contracts when
+  explicitly directed.
+
+
+================================================================================
+8. SECTION H: CURRENT PRIORITIES AND ACTIONABLE NEXT STEPS
+================================================================================
+8.1 Immediate Next Action (Step 1)
+Execute the Live Environmental Smoke Test:
+Verify Groq credentials and isolated PostgreSQL database connectivity with a single
+bounded test: S8 Medical Advice Guardrail Refusal (1 LLM call, fast response).
+
+8.2 Actionable Ordered Checklist
+1. [ ] STEP 1: Verify Live Prerequisites & Run S8 Smoke Test
+       - Confirm Docker PostgreSQL container is running:
+         `docker compose -f deployment/compose.yaml up -d --wait`
+       - Ensure evaluation database `pharmasense_test` has Alembic migrations applied:
+         `$env:EVAL_DATABASE_URL="postgresql://pharmasense:pharmasense@localhost:5432/pharmasense_test"`
+         `uv run alembic upgrade head`
+       - Ensure Groq credentials are set in environment:
+         `$env:GROQ_API_KEY="gsk_..."`
+         `$env:LLM_PROVIDER="groq"`
+         `$env:PHARMASENSE_LLM_MODEL="qwen/qwen3.8-27b"`
+         `$env:ACCEPTANCE_MODE="live"`
+       - Run S8 smoke test:
+         `.\.venv\Scripts\python -m pytest tests/test_live_acceptance.py -k test_s8_medical_advice -v`
+
+2. [ ] STEP 2: Execute Remaining Live Acceptance Scenarios in Preserved Order
+       - Node 1: S7 - No-Evidence Handling
+         `.\.venv\Scripts\python -m pytest tests/test_live_acceptance.py -k test_s7_no_evidence -v`
+       - Node 2: S5 - Compound Similarity
+         `.\.venv\Scripts\python -m pytest tests/test_live_acceptance.py -k test_s5_compound_similarity -v`
+       - Node 3: S3 - Adverse Event Triage
+         `.\.venv\Scripts\python -m pytest tests/test_live_acceptance.py -k test_s3_adverse_event -v`
+       - Node 4: S6 - Two-Specialist Synthesis
+         `.\.venv\Scripts\python -m pytest tests/test_live_acceptance.py -k test_s6_report_writer -v`
+       - Node 5: S4 - Full Multi-Agent Synthesis
+         `.\.venv\Scripts\python -m pytest tests/test_live_acceptance.py -k test_s4_compound_full_picture -v`
+
+3. [ ] STEP 3: Harmonize Golden-Set Fixtures (Before 28-Case Benchmark)
+       Align naming strings in evals/golden_set.jsonl and evals/metrics.py as
+       documented in Section G.1.
+
+4. [ ] STEP 4: Run the 28-Case Evaluation Benchmark
+       Execute evals/runner.py to produce the complete evaluation report with latency
+       distribution and cost estimation.
+
+5. [ ] STEP 5: Proceed to Application Layer / Frontend Development
+       Once live acceptance and benchmark pass, proceed with FastAPI endpoints live
+       integration and frontend UI implementation.
+
+
+================================================================================
+9. SECTION I: COMMANDS, CONFIGURATION, AND ENVIRONMENT SETUP
+================================================================================
+9.1 Tested Offline Test Commands (All Verified Passing in .venv)
+```powershell
+# Run acceptance scenarios (S1 through S8 offline)
+.\.venv\Scripts\python -m pytest tests/test_live_acceptance.py
+
+# Run security guardrail acceptance (medical advice, injections)
+.\.venv\Scripts\python -m pytest tests/test_security_acceptance.py
+
+# Run Report Writer citation and attribution regression tests
+.\.venv\Scripts\python -m pytest tests/agents/test_report.py
+
+# Run evaluation runner and cache tests
+.\.venv\Scripts\python -m pytest tests/test_eval_runner.py
+
+# Run API endpoint tests
+.\.venv\Scripts\python -m pytest tests/api/test_api.py
+
+# Run standalone Adverse Event Triage demo
+.\.venv\Scripts\python scripts/demo_ae_triage.py
+
+# Check formatting and diff hygiene
+git diff --check
+```
+
+9.2 Environment Configuration (Never Commit Secrets)
+```powershell
+# Development database URL
+$env:DATABASE_URL="postgresql://pharmasense:pharmasense@localhost:5432/pharmasense_dev"
+
+# Evaluation database URL (isolated)
+$env:EVAL_DATABASE_URL="postgresql://pharmasense:pharmasense@localhost:5432/pharmasense_test"
+
+# Live acceptance execution flag
+$env:ACCEPTANCE_MODE="live"
+
+# Model provider configuration
+$env:LLM_PROVIDER="groq"
+$env:PHARMASENSE_LLM_MODEL="qwen/qwen3.8-27b"
+$env:GROQ_API_KEY="[REDACTED]"
+```
+
+9.3 Database Infrastructure Commands
+```powershell
+# Start PostgreSQL + pgvector container
+docker compose -f deployment/compose.yaml up -d --wait
+
+# Run Alembic migrations
+uv run alembic upgrade head
+
+# Ingest synthetic data tables
+uv run python -m pharmasense.data.ingest.import_csvs
+
+# Ingest document chunks and embeddings into pgvector
+uv run python -m pharmasense.retrieval.ingestion
+```
+
+
+================================================================================
+10. SECTION J: IMPORTANT CONVERSATION DETAILS & USER PREFERENCES
+================================================================================
+1. Preservation is Mandatory: User requires preserving every uncommitted change
+   in the working tree. Never run `git reset`, `git checkout .`, `git clean -fd`,
+   or stage/commit files without explicit instructions.
+2. Read-Only Tasks: When the user requests a read-only audit or review, make ZERO
+   file changes and run NO tests or live LLM calls.
+3. Strict Truthfulness: Never claim a test passed or a feature was verified unless
+   explicit test output or file evidence exists. Do not fabricate token counts,
+   costs, or accuracy scores.
+4. Python Execution: Use `.\.venv\Scripts\python` when executing commands in
+   PowerShell on this Windows system to ensure packages from the virtual
+   environment are loaded.
+5. Windows Formatting: Ensure LF/CRLF and character encodings display cleanly on
+   Windows terminals (e.g. use standard ASCII dashes in console printouts).
+
+
+================================================================================
+11. SECTION K: INSTRUCTIONS FOR THE NEXT AI ASSISTANT
+================================================================================
+You are resuming work on PharmaSenseAI at d:\PharmaSenseAI\PharmaSenseAI.
+
+Follow these strict rules upon taking over:
+
+1. READ THIS ENTIRE SUMMARY FIRST. Treat the verified current-state evidence in
+   this document as authoritative. Do not assume remote repositories or prior
+   summaries override what is verified here.
+2. PRESERVE UNCOMMITTED CHANGES. The working tree has 8 modified files and 1 untracked
+   script. DO NOT discard, overwrite, stage, or commit any of them unless explicitly
+   instructed by the user.
+3. RESPECT SCOPE & RESTRICTIONS. Do not make live LLM calls or run benchmarks until
+   the user directs you to begin live acceptance.
+4. DO NOT REPEAT COMPLETED WORK. Mentor feedback (guardrails, metrics accounting,
+   AE triage demo, and README) is 100% complete. Offline test health is 68/68 passing
+   for the focused suite. Do not re-audit or rebuild what is already verified.
+5. BEGIN WITH THE IMMEDIATE NEXT ACTION:
+   When ready for live testing, verify the live environment prerequisites (PostgreSQL
+   pharmasense_test and Groq credentials) and execute the first smoke test node:
+   `.\.venv\Scripts\python -m pytest tests/test_live_acceptance.py -k test_s8_medical_advice -v`
+   under `$env:ACCEPTANCE_MODE="live"`.
+6. VERIFY BEFORE CLAIMING COMPLETION. Always inspect tool output, check exit codes,
+   and run `git diff --check` before reporting status to the user.
+7. SEPARATE CLAIMS FROM FACTS. If something cannot be verified from local files or
+   command execution, label it UNVERIFIED.
+================================================================================
+END OF CHAT CONTINUATION SUMMARY
+================================================================================

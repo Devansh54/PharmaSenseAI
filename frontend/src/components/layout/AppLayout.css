@@ -1,0 +1,196 @@
+.app-shell {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-canvas);
+  position: relative;
+}
+
+/* Background Ambient Lighting */
+.app-ambient-glow {
+  position: absolute;
+  top: 0;
+  left: var(--sidebar-width);
+  right: 0;
+  height: 600px;
+  background: var(--gradient-hero-ambient);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Main Content Workspace */
+.app-main-canvas {
+  flex: 1;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-content-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 48px 32px 56px 32px;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Non-active placeholder view container */
+.secondary-tab-view {
+  width: 100%;
+  max-width: 760px;
+  margin: 40px auto 0 auto;
+  padding: 32px 28px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  animation: fade-in 300ms ease-out;
+}
+
+.secondary-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(168, 85, 247, 0.12);
+  color: var(--accent-primary-light);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  margin-bottom: 16px;
+}
+
+.secondary-tab-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.secondary-tab-desc {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 520px;
+  margin: 0 auto 20px auto;
+}
+
+.secondary-tab-pill {
+  display: inline-flex;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* Phase 2 Staged Question Confirmation */
+.staged-question-card {
+  width: 100%;
+  max-width: 760px;
+  margin: -12px auto 28px auto;
+  padding: 16px 20px;
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fade-in 300ms ease-out;
+}
+
+.staged-question-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.staged-question-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary-light);
+}
+
+.staged-question-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.staged-question-clear-btn {
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  transition: all var(--transition-fast);
+}
+
+.staged-question-clear-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.staged-question-text {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  font-style: italic;
+  padding-left: 10px;
+  border-left: 2px solid var(--accent-primary);
+}
+
+.staged-question-note {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Responsive Adaptations for Mobile */
+@media (max-width: 768px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .app-sidebar {
+    display: none; /* Desktop sidebar hidden on mobile; replaced by MobileDrawer */
+  }
+
+  .app-ambient-glow {
+    left: 0;
+    height: 400px;
+    background: radial-gradient(circle at 50% 10%, rgba(147, 51, 234, 0.22) 0%, rgba(59, 130, 246, 0.12) 45%, transparent 75%);
+  }
+
+  .app-main-canvas {
+    padding-top: var(--mobile-header-height);
+    height: 100vh;
+  }
+
+  .canvas-content-wrapper {
+    padding: 24px 16px max(32px, env(safe-area-inset-bottom)) 16px;
+  }
+
+  .secondary-tab-view {
+    padding: 24px 16px;
+    margin-top: 20px;
+  }
+}
