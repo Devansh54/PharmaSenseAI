@@ -17,10 +17,19 @@ import os
 from pharmasense.llm.gateway import LLMGateway
 from pharmasense.llm.groq_adapter import GroqAdapter
 from pharmasense.llm.budget import BudgetEnforcingGateway
+from fastapi.middleware.cors import CORSMiddleware
 from pharmasense.orchestration.graph import build_orchestration_graph
 from pharmasense.observability.telemetry import TelemetryManager
 
 app = FastAPI(title="PharmaSense AI API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("ALLOWED_ORIGINS", "*").split(",") if os.environ.get("ALLOWED_ORIGINS") else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Dependency for DB Session
 def get_db_session():
