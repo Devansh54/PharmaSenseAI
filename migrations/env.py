@@ -29,7 +29,12 @@ if not existing_url:
         url = eval_db
     else:
         url = os.environ.get("PHARMASENSE_DATABASE_URL", DATABASE_URL)
+    if url and url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
     config.set_main_option("sqlalchemy.url", url)
+else:
+    if existing_url.startswith("postgres://"):
+        config.set_main_option("sqlalchemy.url", existing_url.replace("postgres://", "postgresql://", 1))
 
 
 def run_migrations_offline() -> None:
