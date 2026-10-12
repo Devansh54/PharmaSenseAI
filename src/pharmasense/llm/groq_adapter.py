@@ -190,8 +190,9 @@ class GroqAdapter(LLMProvider):
 
         if request.temperature is not None:
             params["temperature"] = request.temperature
-        if request.max_tokens is not None:
-            params["max_tokens"] = request.max_tokens
+        max_tokens = request.max_tokens if request.max_tokens is not None else getattr(self._config, "max_output_tokens", 600)
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
 
         try:
             raw = self._client.chat.completions.create(**params)

@@ -38,27 +38,49 @@ class SpecialistRunner:
 
         task_desc = plan.task_descriptions.get(self.name, state.get("user_prompt", ""))
 
-        # Instantiate agent lazily to ensure session is bound
-        import inspect
-        sig = inspect.signature(self.agent_factory)
-        if "task_desc" in sig.parameters:
-            agent = self.agent_factory(self.session, self.llm, task_desc=task_desc)
-        else:
-            agent = self.agent_factory(self.session, self.llm)
+        # Thread isolation for database sessions: parallel specialist nodes execute
+        # on different threads in LangGraph and must not share a single psycopg2 connection.
+        bind = getattr(self.session, "bind", None)
+        if bind is None and hasattr(self.session, "get_bind"):
+            try:
+                bind = self.session.get_bind()
+            except Exception:
+                bind = None
 
-        single_tool_mode = plan.workflow_type == "single"
+        use_isolated = bind is not None
+        worker_session = Session(bind) if use_isolated else self.session
+        agent = None
 
         try:
+            # Instantiate agent lazily to ensure session is bound
+            import inspect
+            sig = inspect.signature(self.agent_factory)
+            if "task_desc" in sig.parameters:
+                agent = self.agent_factory(worker_session, self.llm, task_desc=task_desc)
+            else:
+                agent = self.agent_factory(worker_session, self.llm)
+
+            single_tool_mode = plan.workflow_type == "single"
             result, executed_tools = agent.run(task_desc, single_tool_mode=single_tool_mode)
+            if use_isolated:
+                try:
+                    worker_session.commit()
+                except Exception:
+                    worker_session.rollback()
             return {
                 "specialist_results": {self.name: result.model_dump()},
                 "actual_tools": executed_tools
             }
         except Exception as e:
+            if use_isolated:
+                worker_session.rollback()
             return {
                 "errors": [f"{self.name} failed: {str(e)}"],
-                "actual_tools": getattr(agent, "executed_tools", [])
+                "actual_tools": getattr(agent, "executed_tools", []) if agent else []
             }
+        finally:
+            if use_isolated:
+                worker_session.close()
 
 class ReportWriterRunner:
     def __init__(self, session: Session, llm: LLMProvider):

@@ -270,6 +270,18 @@ export const ResponseCard: React.FC<ResponseCardProps> = ({
               <StatusIcon size={14} />
               <span>{statusInfo.label}</span>
             </span>
+            {response?.limitations?.some(l => l.includes('DEMO MODE') || l.includes('SYNTHETIC DATA')) && (
+              <span className="response-status-badge response-demo-badge" style={{
+                backgroundColor: 'rgba(14, 165, 233, 0.15)',
+                color: '#38bdf8',
+                borderColor: 'rgba(14, 165, 233, 0.4)',
+                fontWeight: 700,
+                fontSize: '11px',
+                letterSpacing: '0.04em'
+              }}>
+                DEMO MODE — SYNTHETIC DATA
+              </span>
+            )}
             <div className="response-query-wrapper">
               <span className="response-query-label">Research Inquiry</span>
               <p className="response-query-text">&ldquo;{question}&rdquo;</p>

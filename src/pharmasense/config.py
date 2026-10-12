@@ -100,9 +100,15 @@ class GroqAdapterConfig:
     model: str = field(default_factory=get_default_model)
     api_key: Optional[str] = field(default_factory=lambda: os.environ.get(GROQ_API_KEY_ENV))
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    max_output_tokens: int = field(
+        default_factory=lambda: int(os.environ.get("PHARMASENSE_MAX_OUTPUT_TOKENS", "600"))
+    )
 
     def is_configured(self) -> bool:
         return bool(self.api_key)
+
+# --- Analysis Deadline ---
+ANALYSIS_TIMEOUT_SECONDS = float(os.environ.get("PHARMASENSE_ANALYSIS_TIMEOUT_SECONDS", "60.0"))
 
 # --- RAG Foundation ---
 CHUNK_TARGET_TOKENS = int(os.environ.get("PHARMASENSE_CHUNK_TARGET_TOKENS", "400"))
@@ -121,6 +127,7 @@ __all__ = [
     "PROVENANCE_DIR",
     "GOLDEN_SET_PATH",
     "CSV_FILES",
+    "ANALYSIS_TIMEOUT_SECONDS",
     "CHUNK_TARGET_TOKENS",
     "CHUNK_OVERLAP_TOKENS",
     "EMBEDDING_MODEL_NAME",

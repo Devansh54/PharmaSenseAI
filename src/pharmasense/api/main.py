@@ -12,8 +12,9 @@ from pharmasense.api.models import (
     EvidenceOut, ReviewDecisionIn, ReviewTaskOut, ReviewDecisionOut
 )
 from pharmasense.db.models import DocumentChunk, ReviewTask, ReviewDecision
-from pharmasense.config import DATABASE_URL, GroqAdapterConfig, GatewayConfig
+from pharmasense.config import DATABASE_URL, GroqAdapterConfig, GatewayConfig, ANALYSIS_TIMEOUT_SECONDS
 import os
+from pharmasense.llm.contracts import LLMProviderError, LLMTimeoutError, LLMGatewayError
 from pharmasense.llm.gateway import LLMGateway
 from pharmasense.llm.groq_adapter import GroqAdapter
 from pharmasense.llm.budget import BudgetEnforcingGateway
@@ -44,11 +45,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Dependency for DB Session
-def get_db_session():
+
+def _attach_cors_headers(request: Request, headers: dict) -> dict:
+    origin = request.headers.get("origin")
+    if origin and (origin in _allowed_origins or "*" in _allowed_origins):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Headers"] = "*"
+        headers["Access-Control-Allow-Methods"] = "*"
+    return headers
+
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    headers = _attach_cors_headers(request, dict(exc.headers or {}))
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=headers,
+    )
+
+
+@app.exception_handler(Exception)
+async def custom_unhandled_exception_handler(request: Request, exc: Exception):
+    headers = _attach_cors_headers(request, {})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}"},
+        headers=headers,
+    )
+
+
+# Dependency for DB Session - reuse singleton engine to prevent connection pool churn
+_engine = None
+
+
+def get_engine():
+    global _engine
     db_url = os.environ.get("EVAL_DATABASE_URL", DATABASE_URL)
-    engine = create_engine(db_url)
-    with Session(engine) as session:
+    if _engine is None or str(_engine.url) != db_url:
+        _engine = create_engine(
+            db_url,
+            pool_pre_ping=True,
+            pool_size=int(os.environ.get("DB_POOL_SIZE", "5")),
+            max_overflow=int(os.environ.get("DB_MAX_OVERFLOW", "5")),
+        )
+    return _engine
+
+
+def get_db_session():
+    with Session(get_engine()) as session:
         yield session
 
 def build_gateway():
@@ -64,6 +110,27 @@ async def create_analysis(
     db: Session = Depends(get_db_session),
     gateway = Depends(build_gateway)
 ):
+    # 1. Input Guardrail Security Screening (always active in all modes)
+    from pharmasense.validation.security import detect_injection
+    if detect_injection(req.user_prompt):
+        return AnalysisResponse(
+            status="failed",
+            findings="I cannot fulfill this request. Security screening detected prompt injection or unsafe instructions.",
+            citations=[],
+            limitations=["Request blocked by input guardrail security screening."],
+            branch_outcomes={},
+            escalation_reference=None,
+            timing_sec=0.05,
+            total_tokens=None,
+            error_message="Guardrail blocked request: Prompt injection detected."
+        )
+
+    # 2. Opt-in Demo Recording Mode (PHARMASENSE_DEMO_MODE=true)
+    from pharmasense.orchestration.demo_mode import handle_demo_analysis
+    demo_response = handle_demo_analysis(req.user_prompt, db)
+    if demo_response is not None:
+        return demo_response
+
     graph = build_orchestration_graph(db, gateway)
     
     request_id = req.request_id or str(uuid.uuid4())
@@ -77,9 +144,44 @@ async def create_analysis(
         })
     
     try:
-        state = await asyncio.wait_for(asyncio.to_thread(run_graph), timeout=300.0)
+        state = await asyncio.wait_for(asyncio.to_thread(run_graph), timeout=ANALYSIS_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Analysis exceeded overall deadline")
+        raise HTTPException(
+            status_code=504,
+            detail=f"Analysis exceeded overall deadline ({ANALYSIS_TIMEOUT_SECONDS}s)"
+        )
+    except LLMTimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail=f"LLM provider request timed out: {str(exc)}"
+        )
+    except LLMProviderError as exc:
+        err_msg = str(exc)
+        if "rate" in err_msg.lower() or "429" in err_msg or "quota" in err_msg.lower():
+            raise HTTPException(
+                status_code=429,
+                detail=f"LLM provider rate limit exceeded: {err_msg}"
+            )
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM provider unavailable: {err_msg}"
+        )
+    except Exception as exc:
+        err_msg = str(exc)
+        if "rate" in err_msg.lower() or "429" in err_msg or "quota" in err_msg.lower():
+            raise HTTPException(
+                status_code=429,
+                detail=f"LLM provider rate limit exceeded: {err_msg}"
+            )
+        if "timeout" in err_msg.lower() or "timed out" in err_msg.lower():
+            raise HTTPException(
+                status_code=504,
+                detail=f"Analysis timed out: {err_msg}"
+            )
+        raise HTTPException(
+            status_code=503,
+            detail=f"Analysis execution failed: {err_msg}"
+        )
     
     end_time = time.time()
     latency = end_time - start_time
@@ -88,7 +190,24 @@ async def create_analysis(
     report = state.get("final_report", {})
     
     if not report and errors:
-        raise HTTPException(status_code=422, detail="|".join(errors))
+        err_str = "|".join(errors)
+        err_lower = err_str.lower()
+        if "rate" in err_lower or "429" in err_lower or "quota" in err_lower:
+            raise HTTPException(
+                status_code=429,
+                detail=f"LLM provider rate limit exceeded: {err_str}"
+            )
+        if "timeout" in err_lower or "timed out" in err_lower:
+            raise HTTPException(
+                status_code=504,
+                detail=f"Upstream provider timeout: {err_str}"
+            )
+        if any(term in err_lower for term in ["failed", "unavailable", "service", "error"]):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Specialist orchestration failed: {err_str}"
+            )
+        raise HTTPException(status_code=422, detail=err_str)
     if not report:
         raise HTTPException(status_code=500, detail="Orchestration returned no report")
         
@@ -280,7 +399,7 @@ def create_review_decision(review_id: str, dec_in: ReviewDecisionIn, db: Session
     return {"status": "success"}
 
 @app.get("/health/live")
-def health_live():
+async def health_live():
     return {"status": "ok"}
 
 @app.get("/health/ready")

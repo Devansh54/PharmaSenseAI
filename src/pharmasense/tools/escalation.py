@@ -42,8 +42,12 @@ def escalation_notifier_tool(session: Session, input_data: EscalationInput) -> E
         created_at=datetime.now(timezone.utc)
     )
 
-    session.add(new_task)
-    session.flush()
+    try:
+        session.add(new_task)
+        session.flush()
+    except Exception:
+        session.rollback()
+        raise
 
     # Stub delivery
     delivery_msg = f"Mock Delivery: Alert sent to safety team for task {task_id}."

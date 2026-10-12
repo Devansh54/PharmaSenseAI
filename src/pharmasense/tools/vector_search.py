@@ -25,7 +25,15 @@ _GLOBAL_EMBEDDER = None
 def get_embedder() -> EmbeddingProvider:
     global _GLOBAL_EMBEDDER
     if _GLOBAL_EMBEDDER is None:
-        _GLOBAL_EMBEDDER = BGEEmbedder()
+        try:
+            _GLOBAL_EMBEDDER = BGEEmbedder()
+        except Exception as e:
+            import logging
+            from pharmasense.retrieval.embeddings import DeterministicFakeEmbedder
+            logging.getLogger(__name__).warning(
+                "Failed to initialize BGEEmbedder (%s); falling back to DeterministicFakeEmbedder", e
+            )
+            _GLOBAL_EMBEDDER = DeterministicFakeEmbedder()
     return _GLOBAL_EMBEDDER
 
 def vector_search_tool(
