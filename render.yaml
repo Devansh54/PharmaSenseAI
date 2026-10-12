@@ -11,8 +11,14 @@ services:
         fromDatabase:
           name: pharmasense-db
           property: connectionString
+      - key: PHARMASENSE_DATABASE_URL
+        fromDatabase:
+          name: pharmasense-db
+          property: connectionString
       - key: ALLOWED_ORIGINS
         value: "https://devansh54.github.io,http://127.0.0.1:5173,http://localhost:5173"
+      - key: LLM_MODEL
+        value: "qwen/qwen3.8-27b"
       - key: GROQ_API_KEY
         sync: false
 

@@ -34,10 +34,16 @@ CSV_FILES = {
 }
 
 # --- Database ---
-DATABASE_URL = os.environ.get(
-    "PHARMASENSE_DATABASE_URL",
-    "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense",
+_raw_db_url = os.environ.get(
+    "DATABASE_URL",
+    os.environ.get(
+        "PHARMASENSE_DATABASE_URL",
+        "postgresql+psycopg2://pharmasense:pharmasense@localhost:5432/pharmasense",
+    ),
 )
+if _raw_db_url.startswith("postgres://"):
+    _raw_db_url = _raw_db_url.replace("postgres://", "postgresql://", 1)
+DATABASE_URL = _raw_db_url
 
 # --- LLM Gateway ---
 LLM_PROVIDER_NAME = os.environ.get("LLM_PROVIDER", "openai")
