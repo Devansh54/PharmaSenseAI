@@ -9,12 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy project definition, source, migrations, and synthetic data before installation
+# Copy project definition, source, migrations, agent specs, and synthetic data before installation
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
 COPY pharmasense_synthetic_data_csv/ ./pharmasense_synthetic_data_csv/
+COPY agent_specs/ ./agent_specs/
 
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
