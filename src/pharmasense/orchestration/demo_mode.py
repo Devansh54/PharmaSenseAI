@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import date
 from typing import Optional
 from sqlalchemy.orm import Session
 
 from pharmasense.api.models import AnalysisResponse, CitationOut
+from pharmasense.db.source_schema import AdverseEvent, TrialSite
 from pharmasense.tools.escalation import escalation_notifier_tool, EscalationInput
 
 
@@ -37,9 +39,84 @@ DEMO_INDICATOR = "DEMO MODE — SYNTHETIC DATA"
 DEMO_LIMITATION = f"{DEMO_INDICATOR}: Pre-verified recording response generated from synthetic clinical fixtures."
 
 
+def _find_or_seed_adverse_event(db: Session) -> Optional[AdverseEvent]:
+    """Find a valid adverse event from the database, adhering strictly to FK constraints.
+
+    1. Prefer a serious event in TRL-0034.
+    2. Next, any event in TRL-0034.
+    3. Next, any serious event in adverse_events.
+    4. Next, any adverse event in adverse_events.
+    5. If adverse_events is completely empty, check if a trial site exists
+       and insert a valid synthetic adverse event row so foreign keys are satisfied.
+    """
+    # 1. Matching trial (TRL-0034) AND Serious
+    target = (
+        db.query(AdverseEvent)
+        .filter(AdverseEvent.trial_id == "TRL-0034", AdverseEvent.seriousness == "Serious")
+        .order_by(AdverseEvent.event_id)
+        .first()
+    )
+    if target:
+        return target
+
+    # 2. Any event for TRL-0034
+    target = (
+        db.query(AdverseEvent)
+        .filter(AdverseEvent.trial_id == "TRL-0034")
+        .order_by(AdverseEvent.event_id)
+        .first()
+    )
+    if target:
+        return target
+
+    # 3. Any Serious event in the database
+    target = (
+        db.query(AdverseEvent)
+        .filter(AdverseEvent.seriousness == "Serious")
+        .order_by(AdverseEvent.event_id)
+        .first()
+    )
+    if target:
+        return target
+
+    # 4. Any event in the database
+    target = db.query(AdverseEvent).order_by(AdverseEvent.event_id).first()
+    if target:
+        return target
+
+    # 5. Fallback: If adverse_events is empty, see if we can seed a valid row
+    # using an existing trial site to satisfy the Foreign Key constraint
+    site = db.query(TrialSite).filter(TrialSite.trial_id == "TRL-0034").first()
+    if not site:
+        site = db.query(TrialSite).first()
+
+    if site:
+        new_ae = AdverseEvent(
+            event_id="AE-00023",
+            trial_id=site.trial_id,
+            site_id=site.site_id,
+            patient_code="PT-23785",
+            event_date=date(2026, 4, 30),
+            adverse_event_term="Anemia",
+            severity="Severe",
+            seriousness="Serious",
+            causality_assessment="Not Related",
+            outcome="Fatal",
+            reported_by="Dr. Gomez",
+        )
+        try:
+            db.add(new_ae)
+            db.flush()
+            return new_ae
+        except Exception:
+            db.rollback()
+
+    return None
+
+
 def handle_demo_analysis(user_prompt: str, db: Session) -> Optional[AnalysisResponse]:
     """Return deterministic AnalysisResponse for scripted scenarios if demo mode is active.
-    
+
     Returns None if demo mode is off or if the prompt is not one of the 5 scripted scenarios.
     """
     if not is_demo_mode_enabled():
@@ -140,35 +217,91 @@ def handle_demo_analysis(user_prompt: str, db: Session) -> Optional[AnalysisResp
             error_message=None
         )
 
+
     # ------------------------------------------------------------------
     # Scenario 3: Adverse Event Triage & Escalation
     # "A site just reported a serious adverse event for Trial TRL-0034 — triage it."
     # ------------------------------------------------------------------
     if "trl-0034" in normalized and ("adverse event" in normalized or "triage" in normalized):
-        # Call genuine escalation tool using existing implementation
-        esc_out = escalation_notifier_tool(
-            session=db,
-            input_data=EscalationInput(
-                event_id="AE-00023",
-                reason="Severe Anemia (Fatal outcome) in Trial TRL-0034 requires urgent clinical safety review"
+        target_ae = _find_or_seed_adverse_event(db)
+        if not target_ae:
+            # Safe, graceful fallback when no matching or seedable adverse event data exists
+            return AnalysisResponse(
+                status="no_evidence",
+                findings=(
+                    f"> **{DEMO_INDICATOR}**\n\n"
+                    f"### Adverse Event Triage Report: Trial TRL-0034\n\n"
+                    f"- **Status**: No adverse event records found in the database.\n"
+                    f"- **Safety Action**: No active records available to escalate to the review queue."
+                ),
+                citations=[],
+                limitations=[
+                    DEMO_LIMITATION,
+                    "No adverse event records exist in the operational database for triage or escalation.",
+                ],
+                branch_outcomes={
+                    "Adverse Event Triage": "No adverse event records found in database for triage."
+                },
+                escalation_reference=None,
+                timing_sec=0.10,
+                total_tokens=None,
+                error_message=None
             )
-        )
-        db.commit()
-        task_id = esc_out.task_id
+
+        trial_id = target_ae.trial_id
+        event_id = target_ae.event_id
+        term = target_ae.adverse_event_term or "Severe Anemia"
+        severity = target_ae.severity or "Severe"
+        seriousness = target_ae.seriousness or "Serious"
+        outcome = target_ae.outcome or "Fatal"
+
+        try:
+            esc_out = escalation_notifier_tool(
+                session=db,
+                input_data=EscalationInput(
+                    event_id=event_id,
+                    reason=f"{severity} {term} ({outcome} outcome) in Trial {trial_id} requires urgent clinical safety review"
+                )
+            )
+            db.commit()
+            task_id = esc_out.task_id
+        except Exception as exc:
+            db.rollback()
+            return AnalysisResponse(
+                status="partial_success",
+                findings=(
+                    f"> **{DEMO_INDICATOR}**\n\n"
+                    f"### Adverse Event Triage Report: Trial {trial_id}\n\n"
+                    f"- **Identified Event**: `{event_id}` ({term}, {severity})\n"
+                    f"- **Escalation Error**: Review task could not be persisted: {str(exc)}"
+                ),
+                citations=[],
+                limitations=[
+                    DEMO_LIMITATION,
+                    f"Failed to persist review task for {event_id}: {str(exc)}",
+                ],
+                branch_outcomes={
+                    "Adverse Event Triage": f"Triaged event {event_id} for {trial_id}, but persistence failed."
+                },
+                escalation_reference=None,
+                timing_sec=0.15,
+                total_tokens=None,
+                error_message=str(exc)
+            )
 
         findings = (
             f"> **{DEMO_INDICATOR}**\n"
             f"> Triage completed using deterministic clinical safety classification and persisted escalation workflow.\n\n"
-            f"### Adverse Event Triage Report: Trial TRL-0034\n\n"
-            f"A clinical safety triage was conducted for Trial **TRL-0034**:\n\n"
-            f"- **Identified Critical Event**: `AE-00023`\n"
-            f"- **Event Term**: Severe Anemia\n"
-            f"- **Severity**: **Severe**\n"
-            f"- **Seriousness**: **Serious**\n"
-            f"- **Outcome**: **Fatal**\n"
+            f"### Adverse Event Triage Report: Trial {trial_id}\n\n"
+            f"A clinical safety triage was conducted for Trial **{trial_id}**:\n\n"
+            f"- **Identified Critical Event**: `{event_id}`\n"
+            f"- **Event Term**: {term}\n"
+            f"- **Severity**: **{severity}**\n"
+            f"- **Seriousness**: **{seriousness}**\n"
+            f"- **Outcome**: **{outcome}**\n"
             f"- **Classification Rules Triggered**:\n"
             f"  - `RULE_01_SERIOUS_REQUIRES_REVIEW`: Event explicitly classified as Serious.\n"
-            f"  - `RULE_02_HIGH_SEVERITY_FLAGGED`: Severity is Fatal/Life-threatening.\n"
+            f"  - `RULE_02_HIGH_SEVERITY_FLAGGED`: Severity is {severity}.\n"
             f"- **Mandatory Human Review**: **YES — Formal safety review required.**\n\n"
             f"#### Escalation Action Taken:\n"
             f"A human-review task has been formally persisted in the safety review queue:\n"
@@ -185,7 +318,7 @@ def handle_demo_analysis(user_prompt: str, db: Session) -> Optional[AnalysisResp
                 "Adverse Event classified according to deterministic safety criteria; task persisted to review queue."
             ],
             branch_outcomes={
-                "Adverse Event Triage": f"Triaged severe adverse event AE-00023 for TRL-0034. Escalated review task {task_id}."
+                "Adverse Event Triage": f"Triaged {severity.lower()} adverse event {event_id} for {trial_id}. Escalated review task {task_id}."
             },
             escalation_reference=task_id,
             timing_sec=0.18,
